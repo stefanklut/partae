@@ -1,0 +1,25 @@
+name: separation
+channels:
+  # - default
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3
+  - numpy
+  - llvm-openmp<16 # For CPU affinity pytorch issues (https://github.com/pytorch/pytorch/issues/102269)
+  - pytorch
+  - lightning
+  - cuda-toolkit
+  - torchvision
+  - opencv
+  - matplotlib
+  - pip
+  - flask
+  - prometheus_client
+  - imagesize
+  - gunicorn
+  - pillow
+  - natsort
+
+  # - pip:
