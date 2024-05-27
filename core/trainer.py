@@ -7,14 +7,14 @@ from torchmetrics import Accuracy
 from torchvision import datasets, transforms
 
 
-class ClassificationTrainer(pl.LightningModule):
+class ClassificationModel(pl.LightningModule):
     def __init__(self, model, learning_rate=1e-3):
-        super(ClassificationTrainer, self).__init__()
+        super(ClassificationModel, self).__init__()
         self.model = model
         self.learning_rate = learning_rate
-        self.train_accuracy = Accuracy()
-        self.val_accuracy = Accuracy()
-        self.test_accuracy = Accuracy()
+        self.train_accuracy = Accuracy(task="multiclass")
+        self.val_accuracy = Accuracy(task="multiclass")
+        self.test_accuracy = Accuracy(task="multiclass")
 
     def forward(self, x):
         return self.model(x)
