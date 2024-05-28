@@ -12,6 +12,7 @@ dependencies:
   - lightning
   - cuda-toolkit
   - torchvision
+  - transformers
   - opencv
   - matplotlib
   - pip
