@@ -203,7 +203,7 @@ class DocumentSeparationDataset(Dataset):
         # Pad to the same size
         max_shape = max([img.size()[-1] for img in images])
         for i in range(len(images)):
-            images[i] = torch.nn.functional.pad(images[i], (0, max_shape - images[i].size()[-1]), value=1)
+            images[i] = torch.nn.functional.pad(images[i], (0, max_shape - images[i].size()[-1]), value=0)
 
         return {"image": images, "shape": shapes, "text": texts, "targets": targets}
 
@@ -217,7 +217,7 @@ def collate_fn(batch):
         # Pad to the same size
         max_shape = max([img.size()[-1] for img in item["image"]])
         for i in range(len(item["image"])):
-            item["image"][i] = torch.nn.functional.pad(item["image"][i], (0, max_shape - item["image"][i].size()[-1]), value=1)
+            item["image"][i] = torch.nn.functional.pad(item["image"][i], (0, max_shape - item["image"][i].size()[-1]), value=0)
         images.append(torch.stack(item["image"]))
 
         shapes.append(item["shape"])
