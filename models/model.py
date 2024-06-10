@@ -155,13 +155,13 @@ class DocumentSeparator(nn.Module):
         )
 
     def forward(self, x):
-        image = x["image"]
-        text = x["text"]
-        image = self.image_encoder(image)
-        text = self.text_encoder(text)
+        images = x["images"]
+        texts = x["texts"]
+        images = self.image_encoder(images)
+        texts = self.text_encoder(texts)
 
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
-        x = torch.cat([image, text], dim=2)
+        x = torch.cat([images, texts], dim=2)
         x, _ = self.lstm(x)
         x = self.flatten(x)
         x = self.fc(x)

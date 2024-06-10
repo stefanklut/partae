@@ -12,9 +12,9 @@ class ClassificationModel(pl.LightningModule):
         super(ClassificationModel, self).__init__()
         self.model = model
         self.learning_rate = learning_rate
-        self.train_accuracy = Accuracy(task="multiclass")
-        self.val_accuracy = Accuracy(task="multiclass")
-        self.test_accuracy = Accuracy(task="multiclass")
+        self.train_accuracy = Accuracy(task="multiclass", num_classes=2)
+        self.val_accuracy = Accuracy(task="multiclass", num_classes=2)
+        self.test_accuracy = Accuracy(task="multiclass", num_classes=2)
 
     def forward(self, x):
         return self.model(x)
@@ -29,7 +29,9 @@ class ClassificationModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
+        y = batch["targets"]
+        del batch["targets"]
+        x = batch
         y_hat = self.model(x)
         loss = F.cross_entropy(y_hat, y)
         acc = self.val_accuracy(y_hat, y)

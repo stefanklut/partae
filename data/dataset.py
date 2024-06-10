@@ -26,18 +26,19 @@ class DocumentSeparationDataset(Dataset):
 
         self.idx_to_idcs = {}
         idx = 0
-        self.doc_lenghts = []
+        self.doc_lengths = []
 
         for i, doc_i in enumerate(image_paths):
-            self.doc_lenghts.append(len(doc_i))
+            self.doc_lengths.append(len(doc_i))
             for j, path_i in enumerate(doc_i):
                 check_path_accessible(path_i)
                 xml_path_i = image_path_to_xml_path(path_i)
                 self.idx_to_idcs[idx] = (i, j)
                 idx += 1
 
-        self.len = sum(self.doc_lenghts)
+        self.len = sum(self.doc_lengths)
         self.image_paths = image_paths
+
         if target is not None:
             self.target = target
         else:
@@ -90,13 +91,13 @@ class DocumentSeparationDataset(Dataset):
         return j == 0
 
     def end_of_document(self, i, j):
-        return j == self.doc_lenghts[i] - 1
+        return j == self.doc_lengths[i] - 1
 
     def is_first_document(self, i, j):
         return i == 0 and j == 0
 
     def is_last_document(self, i, j):
-        return i == len(self.image_paths) - 1 and j == self.doc_lenghts[i] - 1
+        return i == self.doc_lengths[i] - 1 and j == self.doc_lengths[i] - 1
 
     def get_next_scan(self, i, j):
         if self.end_of_document(i, j):
@@ -109,8 +110,8 @@ class DocumentSeparationDataset(Dataset):
     def get_previous_scan(self, i, j):
         if self.start_of_document(i, j):
             if self.is_first_document(i, j):
-                return len(self.image_paths) - 1, self.doc_lenghts[-1] - 1
-            return i - 1, self.doc_lenghts[i - 1] - 1
+                return len(self.image_paths) - 1, self.doc_lengths[-1] - 1
+            return i - 1, self.doc_lengths[i - 1] - 1
         else:
             return i, j - 1
 
@@ -127,7 +128,7 @@ class DocumentSeparationDataset(Dataset):
     def get_random_previous_scan(self, i, j):
         if self.start_of_document(i, j):
             random_i = self.random_choice_except(len(self.image_paths), i)
-            return random_i, self.doc_lenghts[random_i] - 1
+            return random_i, self.doc_lengths[random_i] - 1
         else:
             return i, j - 1
 
@@ -193,7 +194,7 @@ class DocumentSeparationDataset(Dataset):
             if self.transform:
                 image = self.transform(image)
             else:
-                image = torch.tensor(image).permute(2, 0, 1)
+                image = torch.tensor(image).float().permute(2, 0, 1)
 
             targets.append(target)
             images.append(image)
@@ -201,34 +202,16 @@ class DocumentSeparationDataset(Dataset):
             texts.append(text)
 
         # Pad to the same size
-        max_shape = max([img.size()[-1] for img in images])
+        max_shape = np.max([image.size()[-2:] for image in images], axis=0)
         for i in range(len(images)):
-            images[i] = torch.nn.functional.pad(images[i], (0, max_shape - images[i].size()[-1]), value=0)
+            images[i] = torch.nn.functional.pad(
+                images[i],
+                (0, int(max_shape[1] - images[i].size()[-1]), 0, int(max_shape[0] - images[i].size()[-2])),
+                value=0,
+            )
+        images = torch.stack(images)
 
-        return {"image": images, "shape": shapes, "text": texts, "targets": targets}
-
-
-def collate_fn(batch):
-    images = []
-    shapes = []
-    texts = []
-    targets = []
-    for item in batch:
-        # Pad to the same size
-        max_shape = max([img.size()[-1] for img in item["image"]])
-        for i in range(len(item["image"])):
-            item["image"][i] = torch.nn.functional.pad(item["image"][i], (0, max_shape - item["image"][i].size()[-1]), value=0)
-        images.append(torch.stack(item["image"]))
-
-        shapes.append(item["shape"])
-        texts.append(item["text"])
-        targets.append(item["targets"])
-
-    images = torch.stack(images)
-    shapes = torch.tensor(shapes)
-    targets = torch.tensor(targets)
-
-    return {"images": images, "shapes": shapes, "texts": texts, "targets": targets}
+        return {"images": images, "shapes": shapes, "texts": texts, "targets": targets}
 
 
 if __name__ == "__main__":
@@ -249,6 +232,8 @@ if __name__ == "__main__":
     transform = transforms.Compose([transforms.ToTensor(), transforms.Resize((224, 224))])
     dataset = DocumentSeparationDataset(test_image_paths, transform=transform)
     import torch.utils.data
+
+    from data.dataloader import collate_fn
 
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=5, shuffle=True, collate_fn=collate_fn)
     item = next(iter(dataloader))

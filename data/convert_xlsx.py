@@ -78,20 +78,22 @@ def link_with_paths(data: dict[str, dict[str, list]], paths: Sequence[Path]) -> 
     documents = []
     current_document = []
     # Just sort the paths to make sure they are in the right order
+    first_document = True
     for path in natsorted(paths):
         inventory_number, page_number, skip = path_to_inventory_page_number(path)
         if skip:
-            is_start = 0
+            is_start = False
         else:
             try:
                 is_start = start_of_documents[inventory_number][page_number]
             except KeyError:
-                is_start = 0
+                is_start = False
 
-        if is_start:
+        if is_start and not first_document:
             documents.append(current_document)
             current_document = [path]
         else:
+            first_document = False
             current_document.append(path)
 
     documents.append(current_document)
