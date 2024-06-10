@@ -9,6 +9,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 
 sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))
+from data.augmentations import SmartCompose
 from page_xml.xmlPAGE import PageData
 from utils.image_utils import load_image_array_from_path
 from utils.path_utils import check_path_accessible, image_path_to_xml_path
@@ -181,7 +182,7 @@ class DocumentSeparationDataset(Dataset):
                 idcs.append((next_i, next_j))
 
         targets = []
-        images = []
+        _images = []
         texts = []
         shapes = []
         targets = []
@@ -191,25 +192,22 @@ class DocumentSeparationDataset(Dataset):
             shape = image.shape[:2]
             text = self.get_text(i, j)
 
-            if self.transform:
-                image = self.transform(image)
-            else:
-                image = torch.tensor(image).float().permute(2, 0, 1)
-
             targets.append(target)
-            images.append(image)
+            _images.append(image)
             shapes.append(shape)
             texts.append(text)
 
-        # Pad to the same size
-        max_shape = np.max([image.size()[-2:] for image in images], axis=0)
-        for i in range(len(images)):
-            images[i] = torch.nn.functional.pad(
-                images[i],
-                (0, int(max_shape[1] - images[i].size()[-1]), 0, int(max_shape[0] - images[i].size()[-2])),
-                value=0,
-            )
-        images = torch.stack(images)
+        images = []
+        if self.transform is None:
+            for image in _images:
+                image = transforms.ToTensor()(image)
+                images.append(image)
+        elif isinstance(self.transform, SmartCompose):
+            images = self.transform(_images)
+        else:
+            for image in _images:
+                image = self.transform(image)
+                images.append(image)
 
         return {"images": images, "shapes": shapes, "texts": texts, "targets": targets}
 
