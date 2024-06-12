@@ -1,7 +1,7 @@
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Container, Optional, Sequence
+from typing import Container, Mapping, Optional, Sequence
 
 import openpyxl
 from natsort import natsorted
@@ -72,7 +72,8 @@ def path_to_inventory_page_number(path: Path):
         raise ValueError(f"Path {path} does not match the expected format")
 
 
-def link_with_paths(data: dict[str, dict[str, list]], paths: Sequence[Path]) -> Sequence[Sequence[Path]]:
+def link_with_paths(data: Mapping[str, Mapping[str, list[Path]]], paths: Sequence[Path]) -> list[list[Path]]:
+    # implementation
     start_of_documents = extract_start_of_documents(data)
 
     documents = []

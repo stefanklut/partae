@@ -19,30 +19,48 @@ class ClassificationModel(pl.LightningModule):
     def forward(self, x):
         return self.model(x)
 
+    def split_input(self, batch):
+        y = batch["targets"]
+        y = y.type(torch.int64)
+        y = y.view(-1)
+        del batch["targets"]
+        x = batch
+        return x, y
+
     def training_step(self, batch, batch_idx):
-        x, y = batch
+        x, y = self.split_input(batch)
+
         y_hat = self.model(x)
+        y_hat = y_hat.view(-1, 2)
+
         loss = F.cross_entropy(y_hat, y)
         acc = self.train_accuracy(y_hat, y)
+
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        y = batch["targets"]
-        del batch["targets"]
-        x = batch
+        x, y = self.split_input(batch)
+
         y_hat = self.model(x)
+        y_hat = y_hat.view(-1, 2)
+
         loss = F.cross_entropy(y_hat, y)
         acc = self.val_accuracy(y_hat, y)
+
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 
     def test_step(self, batch, batch_idx):
-        x, y = batch
+        x, y = self.split_input(batch)
+
         y_hat = self.model(x)
+        y_hat = y_hat.view(-1, 2)
+
         loss = F.cross_entropy(y_hat, y)
         acc = self.test_accuracy(y_hat, y)
+
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         self.log("test_acc", acc, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 

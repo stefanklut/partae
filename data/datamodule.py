@@ -49,7 +49,10 @@ class DocumentSeparationModule(pl.LightningDataModule):
         training_paths: Sequence[Path],
         val_paths: Optional[Sequence[Path]],
         xlsx_file: Path,
+        transform=None,
+        batch_size: int = 8,
         number_of_images: int = 3,
+        num_workers: int = 8,
     ):
         super().__init__()
         self.training_paths = training_paths
@@ -61,7 +64,10 @@ class DocumentSeparationModule(pl.LightningDataModule):
             self.val_paths = val_paths
 
         self.xlsx_file = xlsx_file
+        self.transform = transform
+        self.batch_size = batch_size
         self.number_of_images = number_of_images
+        self.num_workers = num_workers
 
     def prepare_data(self):
         # download, split, etc...
@@ -73,11 +79,23 @@ class DocumentSeparationModule(pl.LightningDataModule):
         val_paths = link_with_paths(xlsx_data, self.val_paths)
 
         if stage == "fit" or stage is None:
-            self.train_dataset = DocumentSeparationDataset(training_paths, number_of_images=self.number_of_images)
-            self.val_dataset = DocumentSeparationDataset(val_paths, number_of_images=self.number_of_images)
+            self.train_dataset = DocumentSeparationDataset(
+                training_paths,
+                number_of_images=self.number_of_images,
+                transform=self.transform,
+            )
+            self.val_dataset = DocumentSeparationDataset(
+                val_paths,
+                number_of_images=self.number_of_images,
+                transform=self.transform,
+            )
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, collate_fn=collate_fn)
+        return DataLoader(
+            self.train_dataset, collate_fn=collate_fn, shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, collate_fn=collate_fn)
+        return DataLoader(
+            self.val_dataset, collate_fn=collate_fn, shuffle=False, batch_size=self.batch_size, num_workers=self.num_workers
+        )

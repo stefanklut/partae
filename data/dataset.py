@@ -31,6 +31,8 @@ class DocumentSeparationDataset(Dataset):
 
         for i, doc_i in enumerate(image_paths):
             self.doc_lengths.append(len(doc_i))
+            if len(doc_i) < 1:
+                raise ValueError(f"Document {i} does not contain any images")
             for j, path_i in enumerate(doc_i):
                 check_path_accessible(path_i)
                 xml_path_i = image_path_to_xml_path(path_i)
@@ -46,11 +48,8 @@ class DocumentSeparationDataset(Dataset):
             # If no target is provided, assume that the first image in the document is the target
             self.target = []
             for i in range(len(image_paths)):
-                self.target.append([])
-                for j in range(len(image_paths[i])):
-                    if j == 0:
-                        self.target[i].append(1)
-                    self.target[i].append(0)
+                self.target.append([0] * len(image_paths[i]))
+                self.target[i][0] = 1
 
         assert number_of_images > 0, "Number of images must be greater than 0"
         self.number_of_images = number_of_images
@@ -98,7 +97,7 @@ class DocumentSeparationDataset(Dataset):
         return i == 0 and j == 0
 
     def is_last_document(self, i, j):
-        return i == self.doc_lengths[i] - 1 and j == self.doc_lengths[i] - 1
+        return i == len(self.image_paths) - 1 and j == self.doc_lengths[-1] - 1
 
     def get_next_scan(self, i, j):
         if self.end_of_document(i, j):

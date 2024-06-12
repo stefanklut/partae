@@ -2,12 +2,17 @@ import argparse
 from pathlib import Path
 
 import pytorch_lightning as pl
+import torch
 from pytorch_lightning import Trainer
+from torchvision.transforms import Resize, ToTensor
 
 from core.trainer import ClassificationModel
+from data.augmentations import PadToMaxSize, SmartCompose
 from data.datamodule import DocumentSeparationModule
 from models.model import DocumentSeparator, ImageEncoder, TextEncoder
 from utils.input_utils import get_file_paths, supported_image_formats
+
+torch.set_float32_matmul_precision("high")
 
 
 def get_arguments() -> argparse.Namespace:
@@ -38,10 +43,22 @@ def main(args: argparse.Namespace):
     if not xlsx_file.exists():
         raise FileNotFoundError(f"XLSX file {xlsx_file} does not exist")
 
+    transform = SmartCompose(
+        [
+            ToTensor(),
+            PadToMaxSize(),
+            Resize((224, 224)),
+        ]
+    )
+
     data_module = DocumentSeparationModule(
         training_paths=training_paths,
         val_paths=val_paths,
         xlsx_file=xlsx_file,
+        transform=transform,
+        batch_size=4,
+        number_of_images=3,
+        num_workers=8,
     )
     model = ClassificationModel(
         model=DocumentSeparator(
@@ -49,7 +66,25 @@ def main(args: argparse.Namespace):
             text_encoder=TextEncoder(merge_to_batch=True),
         )
     )
-    trainer = Trainer(max_epochs=10)
+
+    logger = pl.loggers.TensorBoardLogger("lightning_logs", name="document_separator")
+    output_dir = Path(logger.log_dir).joinpath("checkpoints")
+    print(output_dir)
+
+    checkpointer = pl.callbacks.ModelCheckpoint(
+        monitor="val_loss",
+        dirpath=output_dir,
+        filename="document_separator-{epoch:02d}-{val_loss:.2f}",
+        save_top_k=3,
+        mode="min",
+    )
+
+    trainer = Trainer(
+        max_epochs=10,
+        callbacks=[checkpointer],
+        val_check_interval=0.5,
+        logger=logger,
+    )
 
     trainer.fit(model, data_module)
 

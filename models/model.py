@@ -45,12 +45,12 @@ class ImageEncoder(nn.Module):
         self.fc = nn.Sequential(
             LazyLinearBlock(2048),
             LinearBlock(2048, 1024),
-            LinearBlock(1024, 512),
+            nn.Linear(1024, 512),
         )
 
     def encode_image(self, image: torch.Tensor):
         encoded_image = F.interpolate(image, self.resize_size)  # (B, C, resize_size[0], resize_size[1])
-        encoded_image = self.imagenet(image)  # (B, 2048, ...)
+        encoded_image = self.imagenet(encoded_image)  # (B, 2048, ...)
         encoded_image = self.flatten(encoded_image)  # (B, 2048 * ...)
         encoded_image = self.fc(encoded_image)  # (B, 512)
         return encoded_image
@@ -98,15 +98,16 @@ class TextEncoder(nn.Module):
 
         self.fc = nn.Sequential(
             LazyLinearBlock(512),
-            LinearBlock(512, 512),
+            nn.Linear(512, 512),
         )
 
     def encode_text(self, text: list[str]):
         # Tokenize the text
-        encoded_input = self.tokenizer(text, padding=True, truncation=True, return_tensors="pt")  # (B, S)
+        encoded_text = self.tokenizer(text, padding=True, truncation=True, return_tensors="pt")  # (B, S)
+        encoded_text = {key: tensor.to(self.roberta.device) for key, tensor in encoded_text.items()}
 
         # Encode the text
-        encoded_text = self.roberta(**encoded_input).last_hidden_state  # (B, S, 768)
+        encoded_text = self.roberta(**encoded_text).last_hidden_state  # (B, S, 768)
         encoded_text = encoded_text[:, 0]  # (B, 768)
         encoded_text = self.fc(encoded_text)  # (B, 512)
 
@@ -114,7 +115,6 @@ class TextEncoder(nn.Module):
 
     def forward(self, x: list[list[str]]):
         N = len(x[0])  # Number of documents
-        print(N)
         if self.merge_to_batch:
             # Flatten the input
             batched_x: list[str] = [text for texts in x for text in texts]
@@ -147,16 +147,17 @@ class DocumentSeparator(nn.Module):
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
         self.lstm = nn.LSTM(input_size=1024, hidden_size=512, num_layers=1, batch_first=True, bidirectional=True)
-        self.flatten = nn.Flatten(1, -1)
+        self.flatten = nn.Flatten(2, -1)
         self.fc = nn.Sequential(
             LazyLinearBlock(1024),
             LinearBlock(1024, 512),
-            LinearBlock(512, output_size),
+            nn.Linear(512, output_size),
         )
 
     def forward(self, x):
         images = x["images"]
         texts = x["texts"]
+        shapes = x["shapes"]
         images = self.image_encoder(images)
         texts = self.text_encoder(texts)
 
@@ -164,6 +165,9 @@ class DocumentSeparator(nn.Module):
         x = torch.cat([images, texts], dim=2)
         x, _ = self.lstm(x)
         x = self.flatten(x)
+        inverted_shapes = 1 / shapes
+        ratio_shapes = shapes[..., 0:0] / shapes[..., 1:1]
+        x = torch.concat([x, inverted_shapes, ratio_shapes], dim=2)
         x = self.fc(x)
         return x
 

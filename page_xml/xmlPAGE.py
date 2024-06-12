@@ -198,12 +198,12 @@ class PageData:
         """
         text_node = element.find("".join(["./", self.base, "TextEquiv"]))
         if text_node == None:
-            self.logger.warning(f"No Text node found for line {self.get_id(element)} at {self.name}")
+            self.logger.info(f"No Text node found for line {self.get_id(element)} at {self.filepath}")
             return ""
         else:
             text_data = text_node.find("*").text
             if text_data == None:
-                self.logger.warning(f"No text found in line {self.get_id(element)} at {self.filepath}")
+                self.logger.info(f"No text found in line {self.get_id(element)} at {self.filepath}")
                 return ""
             else:
                 return text_data

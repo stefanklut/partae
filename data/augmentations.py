@@ -16,16 +16,25 @@ class _ApplyToList(torch.nn.Module):
 
 
 class PadToMaxSize(_ApplyToList):
-    def __init__(self, fn):
+    def __init__(self):
         fn = None
         super(PadToMaxSize, self).__init__(fn)
 
-    def forward(self, tensor_list: list[torch.Tensor]) -> list[torch.Tensor]:
-        if not isinstance(tensor_list, list):
-            return tensor_list
+    def pil_pad(self, image_list: list[Image]) -> list[Image]:
+        height, width = np.max([image.size for image in image_list], axis=0)
+        for i in range(len(image_list)):
+            height_difference = height - image_list[i].size[1]
+            width_difference = width - image_list[i].size[0]
+            padding = [0, 0, int(width_difference), int(height_difference)]
+            image_list[i] = F.pad(  # type: ignore
+                image_list[i],  # type: ignore
+                padding,
+                fill=0,
+            )
+        return image_list
 
-        height, width = np.max([image.size()[-2:] for image in tensor_list])
-
+    def tensor_pad(self, tensor_list: list[torch.Tensor]) -> list[torch.Tensor]:
+        height, width = np.max([image.size()[-2:] for image in tensor_list], axis=0)
         for i in range(len(tensor_list)):
             height_difference = height - tensor_list[i].size()[-2]
             width_difference = width - tensor_list[i].size()[-1]
@@ -36,6 +45,14 @@ class PadToMaxSize(_ApplyToList):
                 fill=0,
             )
         return tensor_list
+
+    def forward(self, tensor_list: list[torch.Tensor]) -> list[torch.Tensor]:
+        if not isinstance(tensor_list, list):
+            return tensor_list
+
+        if not isinstance(tensor_list[0], torch.Tensor):
+            return self.numpy_pad(tensor_list)  # type: ignore
+        return self.tensor_pad(tensor_list)
 
     def repr(self):
         return f"{self.__class__.__name__}()"

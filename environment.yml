@@ -10,7 +10,7 @@ dependencies:
   - llvm-openmp<16 # For CPU affinity pytorch issues (https://github.com/pytorch/pytorch/issues/102269)
   - pytorch
   - lightning
-  - cuda-toolkit
+  - pytorch-cuda=12.1
   - torchvision
   - transformers
   - opencv
@@ -24,5 +24,6 @@ dependencies:
   - natsort
   - termcolor
   - openpyxl
+  - tensorboardX
 
   # - pip:
