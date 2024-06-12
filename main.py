@@ -4,6 +4,8 @@ from pathlib import Path
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
 from torchvision.transforms import Resize, ToTensor
 
 from core.trainer import ClassificationModel
@@ -67,11 +69,11 @@ def main(args: argparse.Namespace):
         )
     )
 
-    logger = pl.loggers.TensorBoardLogger("lightning_logs", name="document_separator")
+    logger = TensorBoardLogger("lightning_logs", name="document_separator")
     output_dir = Path(logger.log_dir).joinpath("checkpoints")
     print(output_dir)
 
-    checkpointer = pl.callbacks.ModelCheckpoint(
+    checkpointer = ModelCheckpoint(
         monitor="val_loss",
         dirpath=output_dir,
         filename="document_separator-{epoch:02d}-{val_loss:.2f}",
