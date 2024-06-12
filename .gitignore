@@ -161,3 +161,6 @@ cython_debug/
 
 # Lightning
 lightning_logs/
+
+# Excel files
+*.xlsx
