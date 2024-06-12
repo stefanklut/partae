@@ -2,7 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
-from torchvision.models import ResNet50_Weights
+from torchvision.models import (
+    ResNet34_Weights,
+    ResNet50_Weights,
+    VGG16_BN_Weights,
+    ViT_B_16_Weights,
+)
 from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
 
 
@@ -39,7 +44,7 @@ class ImageEncoder(nn.Module):
         self.merge_to_batch = merge_to_batch
         self.resize_size = resize_size
 
-        imagenet = torchvision.models.resnet50(weights=ResNet50_Weights.DEFAULT)
+        imagenet = torchvision.models.resnet34(weights=ResNet34_Weights.DEFAULT)
         self.imagenet = nn.Sequential(*list(imagenet.children())[:-2])
         self.flatten = nn.Flatten(1, -1)
         self.fc = nn.Sequential(
@@ -50,7 +55,8 @@ class ImageEncoder(nn.Module):
 
     def encode_image(self, image: torch.Tensor):
         encoded_image = F.interpolate(image, self.resize_size)  # (B, C, resize_size[0], resize_size[1])
-        encoded_image = self.imagenet(encoded_image)  # (B, 2048, ...)
+        with torch.no_grad():
+            encoded_image = self.imagenet(encoded_image)  # (B, 2048, ...)
         encoded_image = self.flatten(encoded_image)  # (B, 2048 * ...)
         encoded_image = self.fc(encoded_image)  # (B, 512)
         return encoded_image
@@ -107,7 +113,8 @@ class TextEncoder(nn.Module):
         encoded_text = {key: tensor.to(self.roberta.device) for key, tensor in encoded_text.items()}
 
         # Encode the text
-        encoded_text = self.roberta(**encoded_text).last_hidden_state  # (B, S, 768)
+        with torch.no_grad():
+            encoded_text = self.roberta(**encoded_text).last_hidden_state  # (B, S, 768)
         encoded_text = encoded_text[:, 0]  # (B, 768)
         encoded_text = self.fc(encoded_text)  # (B, 512)
 
@@ -147,7 +154,6 @@ class DocumentSeparator(nn.Module):
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
         self.lstm = nn.LSTM(input_size=1024, hidden_size=512, num_layers=1, batch_first=True, bidirectional=True)
-        self.flatten = nn.Flatten(2, -1)
         self.fc = nn.Sequential(
             LazyLinearBlock(1024),
             LinearBlock(1024, 512),
@@ -162,9 +168,8 @@ class DocumentSeparator(nn.Module):
         texts = self.text_encoder(texts)
 
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
-        x = torch.cat([images, texts], dim=2)
-        x, _ = self.lstm(x)
-        x = self.flatten(x)
+        x = torch.cat([images, texts], dim=2)  # (B, N, 1024)
+        x, _ = self.lstm(x)  # (B, N, 1024)
         inverted_shapes = 1 / shapes
         ratio_shapes = shapes[..., 0:0] / shapes[..., 1:1]
         x = torch.concat([x, inverted_shapes, ratio_shapes], dim=2)
