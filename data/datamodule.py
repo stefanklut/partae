@@ -15,7 +15,7 @@ from data.dataset import DocumentSeparationDataset
 
 
 def split_training_paths(
-    training_paths: Sequence[Path], split_ratio: float = 0.8, seed: int = 42
+    training_paths: Sequence[Path], split_ratio: float = 0.9, seed: int = 42
 ) -> tuple[Sequence[Path], Sequence[Path]]:
     """
     Split training paths into training and validation paths while keeping files from the same folder together. And keeping the order of the files.
@@ -59,7 +59,7 @@ class DocumentSeparationModule(pl.LightningDataModule):
 
         if val_paths is None:
             # split training paths 80/20
-            self.training_paths, self.val_paths = split_training_paths(self.training_paths, split_ratio=0.8, seed=101)
+            self.training_paths, self.val_paths = split_training_paths(self.training_paths, split_ratio=0.9, seed=101)
         else:
             self.val_paths = val_paths
 

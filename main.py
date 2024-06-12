@@ -82,9 +82,9 @@ def main(args: argparse.Namespace):
     )
 
     trainer = Trainer(
-        max_epochs=10,
+        max_epochs=3,
         callbacks=[checkpointer],
-        val_check_interval=0.5,
+        val_check_interval=0.25,
         logger=logger,
     )
 
