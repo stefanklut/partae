@@ -59,7 +59,7 @@ class DocumentSeparationDataset(Dataset):
     def __len__(self):
         return self.len
 
-    @functools.lru_cache(maxsize=128)
+    @functools.lru_cache(maxsize=16)
     def get_image(self, i, j):
         image_path = self.image_paths[i][j]
         data = load_image_array_from_path(image_path)
@@ -68,7 +68,7 @@ class DocumentSeparationDataset(Dataset):
         image = data["image"]
         return image
 
-    @functools.lru_cache(maxsize=128)
+    @functools.lru_cache(maxsize=16)
     def get_text(self, i, j):
         xml_path = image_path_to_xml_path(self.image_paths[i][j])
         page_data = PageData(xml_path)
