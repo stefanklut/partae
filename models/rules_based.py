@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import torch
 
@@ -38,6 +40,8 @@ class RulesBased:
 
     def __call__(self, x):
         shapes = x["shapes"]
+        image_paths = x["image_paths"]
+
         B = shapes.shape[0]
         N = shapes.shape[1]
         assert N > 1, "There should be at least 2 images"
@@ -46,6 +50,25 @@ class RulesBased:
 
         predictions = torch.zeros((B, 2))
         for i in range(B):
+            center_path = image_paths[i][center_index]
+            inventory_number_dir = center_path.parent.name
+            if check := re.match(r"(.+)_(.+)_(\d+)(_deelopname\d+)?", center_path.stem):
+                inventory_number_file = check.group(2)
+                if inventory_number_dir != inventory_number_file:
+                    raise ValueError(
+                        f"Inventory number in dir {inventory_number_dir} does not match with inventory number in file {inventory_number_file}. Path: {path}"
+                    )
+                page_number = int(check.group(3))
+                if page_number == 1:
+                    predictions[i, 1] = 1
+                    continue
+
+                if check.group(4):
+                    predictions[i, 0] = 1
+                    continue
+            else:
+                raise ValueError(f"Path {center_path} does not match the expected format")
+
             center_shape = np.asarray(shapes[i, center_index])[::-1]
             prev_shape = np.asarray(shapes[i, center_index - 1])[::-1]
             if self.get_size_match(prev_shape, center_shape, 0.1):
