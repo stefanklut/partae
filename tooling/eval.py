@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pathlib import Path
 
 import pytorch_lightning as pl
@@ -6,7 +7,9 @@ import torch
 import torch.utils.data
 from torchmetrics import ConfusionMatrix
 from torchvision.transforms import Resize, ToTensor
+from tqdm import tqdm
 
+sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))
 from core.trainer import ClassificationModel
 from data.augmentations import PadToMaxSize, SmartCompose
 from data.convert_xlsx import link_with_paths, read_xlsx
@@ -47,7 +50,7 @@ def main(args: argparse.Namespace):
         ]
     )
 
-    xlsx_data = read_xlsx(args.xlsx_file)
+    xlsx_data = read_xlsx(xlsx_file)
     val_paths = link_with_paths(xlsx_data, val_paths)
 
     dataset = DocumentSeparationDataset(
@@ -72,10 +75,10 @@ def main(args: argparse.Namespace):
     )
 
     def get_middle_scan(y, N):
-        i = N // 2 + 1
+        i = N // 2
         return y[:, i]
 
-    model.load_from_checkpoint("args.checkpoint")
+    # model.load_from_checkpoint("args.checkpoint")
 
     rules = RulesBased()
 
@@ -83,15 +86,18 @@ def main(args: argparse.Namespace):
     model.eval()
     confusion_matrix_model = ConfusionMatrix(task="multiclass", num_classes=2)
     confusion_matrix_rules = ConfusionMatrix(task="multiclass", num_classes=2)
-    for batch in val_dataloader:
+    for batch in tqdm(val_dataloader):
         x, y = model.split_input(batch)
         y = get_middle_scan(y, y.shape[1])
 
-        y_hat_model = model(x)
-        y_hat_model = get_middle_scan(y_hat_model, y_hat_model.shape[1])
-        y_hat_model = torch.argmax(y_hat_model, dim=1)
+        # y_hat_model = model(x)
+        # y_hat_model = get_middle_scan(y_hat_model, y_hat_model.shape[1])
+        # y_hat_model = torch.argmax(y_hat_model, dim=1)
+        # confusion_matrix_model.update(y_hat_model, y)
 
         y_hat_rules = rules(x)
+        y_hat_rules = torch.argmax(y_hat_rules, dim=1)
+        confusion_matrix_rules.update(y_hat_rules, y)
 
     print(confusion_matrix_model.compute())
     print(confusion_matrix_rules.compute())

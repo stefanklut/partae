@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 
@@ -41,12 +42,14 @@ class RulesBased:
         N = shapes.shape[1]
         assert N > 1, "There should be at least 2 images"
 
-        center_index = N // 2 + 1
-        center_shape = shapes[:, center_index]
-        prev_shape = shapes[:, center_index - 1]
+        center_index = N // 2
 
         predictions = torch.zeros((B, 2))
         for i in range(B):
-            if self.get_size_match(prev_shape[i], center_shape[i], 0.1):
+            center_shape = np.asarray(shapes[i, center_index])[::-1]
+            prev_shape = np.asarray(shapes[i, center_index - 1])[::-1]
+            if self.get_size_match(prev_shape, center_shape, 0.1):
+                predictions[i, 0] = 1
+            else:
                 predictions[i, 1] = 1
         return predictions

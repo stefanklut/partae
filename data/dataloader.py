@@ -7,11 +7,13 @@ def collate_fn(batch):
     shapes = []
     texts = []
     targets = []
+    image_paths = []
     for item in batch:
         _images.append(item["images"])
         shapes.append(item["shapes"])
         texts.append(item["texts"])
         targets.append(item["targets"])
+        image_paths.append(item["image_paths"])
 
     # Pad to the same size
     max_shape = np.max([image.size()[-2:] for sub_images in _images for image in sub_images], axis=0)
@@ -28,4 +30,4 @@ def collate_fn(batch):
     shapes = torch.tensor(shapes)
     targets = torch.tensor(targets)
 
-    return {"images": images, "shapes": shapes, "texts": texts, "targets": targets}
+    return {"images": images, "shapes": shapes, "texts": texts, "targets": targets, "image_paths": image_paths}

@@ -185,12 +185,14 @@ class DocumentSeparationDataset(Dataset):
         texts = []
         shapes = []
         targets = []
+        image_paths = []
         for i, j in idcs:
             target = self.target[i][j]
             image = self.get_image(i, j)
             shape = image.shape[:2]
             text = self.get_text(i, j)
 
+            image_paths.append(self.image_paths[i][j])
             targets.append(target)
             _images.append(image)
             shapes.append(shape)
@@ -208,7 +210,7 @@ class DocumentSeparationDataset(Dataset):
                 image = self.transform(image)
                 images.append(image)
 
-        return {"images": images, "shapes": shapes, "texts": texts, "targets": targets}
+        return {"images": images, "shapes": shapes, "texts": texts, "targets": targets, "image_paths": image_paths}
 
 
 if __name__ == "__main__":

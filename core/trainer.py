@@ -29,7 +29,7 @@ class ClassificationModel(pl.LightningModule):
         return x, y
 
     def get_middle_scan(self, y, N):
-        i = N // 2 + 1
+        i = N // 2
         return y[:, i]
 
     def training_step(self, batch, batch_idx):

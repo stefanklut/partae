@@ -24,6 +24,7 @@ dependencies:
   - natsort
   - termcolor
   - openpyxl
+  - tensorboard
   - tensorboardX
-
-  # - pip:
+  - pip:
+      - torch-tb-profiler
