@@ -167,12 +167,14 @@ class DocumentSeparator(nn.Module):
         images = self.image_encoder(images)
         texts = self.text_encoder(texts)
 
-        # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
-        x = torch.cat([images, texts], dim=2)  # (B, N, 1024)
-        x, _ = self.lstm(x)  # (B, N, 1024)
         inverted_shapes = 1 / shapes
         ratio_shapes = shapes[..., 0:0] / shapes[..., 1:1]
-        x = torch.concat([x, inverted_shapes, ratio_shapes], dim=2)
+        # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
+        # x = torch.cat([images, texts], dim=2)  # (B, N, 1024)
+        x = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
+        x = F.dropout(x, 0.5)
+        x, _ = self.lstm(x)  # (B, N, 1024)
+        # x = torch.concat([x, inverted_shapes, ratio_shapes], dim=2)
         x = self.fc(x)
         return x
 
