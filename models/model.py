@@ -155,8 +155,8 @@ class DocumentSeparator(nn.Module):
         self.text_encoder = text_encoder
         self.lstm = nn.LSTM(input_size=1024, hidden_size=512, num_layers=1, batch_first=True, bidirectional=True)
         self.fc = nn.Sequential(
-            LazyLinearBlock(1024),
-            LinearBlock(1024, 512),
+            LazyLinearBlock(1024, dropout=0.5),
+            LinearBlock(1024, 512, dropout=0.5),
             nn.Linear(512, output_size),
         )
 
