@@ -159,6 +159,7 @@ class DocumentSeparator(nn.Module):
             LinearBlock(1024, 512, dropout=0.5),
             nn.Linear(512, output_size),
         )
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
         images = x["images"]
@@ -172,7 +173,7 @@ class DocumentSeparator(nn.Module):
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
         # x = torch.cat([images, texts], dim=2)  # (B, N, 1024)
         x = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
-        x = F.dropout(x, 0.5)
+        x = self.dropout(x)
         x, _ = self.lstm(x)  # (B, N, 1024)
         # x = torch.concat([x, inverted_shapes, ratio_shapes], dim=2)
         x = self.fc(x)
