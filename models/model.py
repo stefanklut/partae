@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -53,7 +55,13 @@ class ImageEncoder(nn.Module):
             nn.Linear(1024, 512),
         )
 
+    @property
+    @lru_cache
+    def device(self):
+        return next(self.parameters()).device
+
     def encode_image(self, image: torch.Tensor):
+        image = image.to(self.device)  # (B, C, H, W)
         encoded_image = F.interpolate(image, self.resize_size)  # (B, C, resize_size[0], resize_size[1])
         with torch.no_grad():
             encoded_image = self.imagenet(encoded_image)  # (B, 2048, ...)
@@ -107,10 +115,15 @@ class TextEncoder(nn.Module):
             nn.Linear(512, 512),
         )
 
+    @property
+    @lru_cache
+    def device(self):
+        return next(self.parameters()).device
+
     def encode_text(self, text: list[str]):
         # Tokenize the text
         encoded_text = self.tokenizer(text, padding=True, truncation=True, return_tensors="pt")  # (B, S)
-        encoded_text = {key: tensor.to(self.roberta.device) for key, tensor in encoded_text.items()}
+        encoded_text = {key: tensor.to(self.device) for key, tensor in encoded_text.items()}
 
         # Encode the text
         with torch.no_grad():
@@ -153,13 +166,18 @@ class DocumentSeparator(nn.Module):
         super(DocumentSeparator, self).__init__()
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
-        self.lstm = nn.LSTM(input_size=1027, hidden_size=512, num_layers=1, batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(input_size=1024, hidden_size=512, num_layers=1, batch_first=True, bidirectional=True)
         self.fc = nn.Sequential(
             LazyLinearBlock(1024, dropout=0.5),
             LinearBlock(1024, 512, dropout=0.5),
             nn.Linear(512, output_size),
         )
         self.dropout = nn.Dropout(0.5)
+
+    @property
+    @lru_cache
+    def device(self):
+        return next(self.parameters()).device
 
     def forward(self, x):
         images = x["images"]
@@ -175,7 +193,8 @@ class DocumentSeparator(nn.Module):
         x = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
         x = self.dropout(x)
         x, _ = self.lstm(x)  # (B, N, 1024)
-        # x = torch.concat([x, inverted_shapes, ratio_shapes], dim=2)
+        x = torch.concat([x, inverted_shapes.to(self.device), ratio_shapes.to(self.device)], dim=2)
+        # x = torch.concat([x, inverted_shapes.to(self.device)], dim=2)
         x = self.fc(x)
         return x
 

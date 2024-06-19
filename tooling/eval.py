@@ -31,6 +31,7 @@ def get_arguments() -> argparse.Namespace:
         "-v", "--val", help="Validation input folder/file", nargs="+", action="extend", type=str, required=False
     )
     io_args.add_argument("-x", "--xlsx", help="XLSX file with labels", type=str, default=None)
+    io_args.add_argument("-c", "--checkpoint", help="Path to the checkpoint", type=str, default=None)
 
     args = parser.parse_args()
     return args
@@ -66,40 +67,41 @@ def main(args: argparse.Namespace):
         collate_fn=collate_fn,
     )
 
-    model = ClassificationModel(
-        model=DocumentSeparator(
-            image_encoder=ImageEncoder(merge_to_batch=True),
-            text_encoder=TextEncoder(merge_to_batch=True),
-            output_size=2,
-        ),
+    model = DocumentSeparator(
+        image_encoder=ImageEncoder(merge_to_batch=True),
+        text_encoder=TextEncoder(merge_to_batch=True),
+        output_size=2,
     )
 
     def get_middle_scan(y, N):
         i = N // 2
         return y[:, i]
 
-    # model.load_from_checkpoint("args.checkpoint")
+    if args.checkpoint:
+        model = ClassificationModel.load_from_checkpoint(args.checkpoint, model=model)
 
     rules = RulesBased()
 
     # Evaluate the model
     model.eval()
-    confusion_matrix_model = ConfusionMatrix(task="multiclass", num_classes=2)
-    confusion_matrix_rules = ConfusionMatrix(task="multiclass", num_classes=2)
+    confusion_matrix_model = ConfusionMatrix(task="multiclass", num_classes=2).to(model.device)
+    confusion_matrix_rules = ConfusionMatrix(task="multiclass", num_classes=2).to(model.device)
     for batch in tqdm(val_dataloader):
         x, y = model.split_input(batch)
         y = get_middle_scan(y, y.shape[1])
 
-        # y_hat_model = model(x)
-        # y_hat_model = get_middle_scan(y_hat_model, y_hat_model.shape[1])
-        # y_hat_model = torch.argmax(y_hat_model, dim=1)
-        # confusion_matrix_model.update(y_hat_model, y)
+        y_hat_model = model(x)
+        y_hat_model = get_middle_scan(y_hat_model, y_hat_model.shape[1])
+        y_hat_model = torch.argmax(y_hat_model, dim=1)
+        confusion_matrix_model.update(y_hat_model, y.to(model.device))
 
         y_hat_rules = rules(x)
-        y_hat_rules = torch.argmax(y_hat_rules, dim=1)
-        confusion_matrix_rules.update(y_hat_rules, y)
+        y_hat_rules = torch.argmax(y_hat_rules, dim=1).to(model.device)
+        confusion_matrix_rules.update(y_hat_rules, y.to(model.device))
 
-    print(confusion_matrix_model.compute())
+    if args.checkpoint:
+        print(confusion_matrix_model.compute())
+
     print(confusion_matrix_rules.compute())
 
 

@@ -8,6 +8,9 @@ class RulesBased:
     def __init__(self):
         pass
 
+    def device(self):
+        return torch.device("cpu")
+
     def get_size_match(self, image_size1, image_size2, margin):
         min_multiplier = 1.0 - margin
         max_multiplier = 1.0 + margin
