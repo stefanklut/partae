@@ -153,7 +153,7 @@ class DocumentSeparator(nn.Module):
         super(DocumentSeparator, self).__init__()
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
-        self.lstm = nn.LSTM(input_size=1024, hidden_size=512, num_layers=1, batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(input_size=1027, hidden_size=512, num_layers=1, batch_first=True, bidirectional=True)
         self.fc = nn.Sequential(
             LazyLinearBlock(1024, dropout=0.5),
             LinearBlock(1024, 512, dropout=0.5),
@@ -169,10 +169,13 @@ class DocumentSeparator(nn.Module):
         texts = self.text_encoder(texts)
 
         inverted_shapes = 1 / shapes
-        ratio_shapes = shapes[..., 0:0] / shapes[..., 1:1]
+        print(shapes.size())
+        ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
+        print(ratio_shapes.size())
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
         # x = torch.cat([images, texts], dim=2)  # (B, N, 1024)
         x = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
+        print(x.size())
         x = self.dropout(x)
         x, _ = self.lstm(x)  # (B, N, 1024)
         # x = torch.concat([x, inverted_shapes, ratio_shapes], dim=2)
