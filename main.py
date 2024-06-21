@@ -1,4 +1,5 @@
 import argparse
+import subprocess
 from pathlib import Path
 
 import pytorch_lightning as pl
@@ -29,6 +30,17 @@ def get_arguments() -> argparse.Namespace:
 
     args = parser.parse_args()
     return args
+
+
+def get_git_hash() -> str:
+    version_path = Path("version_info")
+
+    if version_path.is_file():
+        with version_path.open(mode="r") as file:
+            git_hash = file.read().strip()
+    else:
+        git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parent).strip().decode()
+    return git_hash
 
 
 def main(args: argparse.Namespace):
@@ -66,12 +78,17 @@ def main(args: argparse.Namespace):
     )
 
     logger = TensorBoardLogger("lightning_logs", name="document_separator")
-    output_dir = Path(logger.log_dir).joinpath("checkpoints")
-    print(output_dir)
+    output_dir = Path(logger.log_dir)
+
+    # Save git hash to output directory
+    git_hash = get_git_hash()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with output_dir.joinpath("git_hash").open("w") as file:
+        file.write(git_hash)
 
     checkpointer = ModelCheckpoint(
         monitor="val_loss",
-        dirpath=output_dir,
+        dirpath=output_dir.joinpath("checkpoints"),
         filename="document_separator-{epoch:02d}-{val_loss:.2f}",
         save_top_k=3,
         mode="min",

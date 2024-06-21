@@ -73,15 +73,27 @@ def path_to_inventory_page_number(path: Path):
 
 
 def link_with_paths(data: Mapping[str, Mapping[str, list[Path]]], paths: Sequence[Path]) -> list[list[Path]]:
-    # implementation
     start_of_documents = extract_start_of_documents(data)
 
-    documents = []
+    all_documents = []
+    inventory_documents = []
     current_document = []
+    current_inventory_number = None
     # Just sort the paths to make sure they are in the right order
-    first_document = True
     for path in natsorted(paths):
         inventory_number, page_number, skip = path_to_inventory_page_number(path)
+        if current_inventory_number is None:
+            current_inventory_number = inventory_number
+            current_document = [path]
+            continue
+        if current_inventory_number != inventory_number:
+            inventory_documents.append(current_document)
+            all_documents.append(inventory_documents)
+            inventory_documents = []
+            current_document = [path]
+            current_inventory_number = inventory_number
+            continue
+
         if skip:
             is_start = False
         else:
@@ -90,16 +102,17 @@ def link_with_paths(data: Mapping[str, Mapping[str, list[Path]]], paths: Sequenc
             except KeyError:
                 is_start = False
 
-        if is_start and not first_document:
-            documents.append(current_document)
+        if is_start:
+            inventory_documents.append(current_document)
             current_document = [path]
         else:
-            first_document = False
             current_document.append(path)
 
-    documents.append(current_document)
+    if current_document:
+        inventory_documents.append(current_document)
+        all_documents.append(inventory_documents)
 
-    return documents
+    return all_documents
 
 
 if __name__ == "__main__":

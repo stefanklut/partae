@@ -1,10 +1,12 @@
 import functools
 import sys
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional, Sequence
 
 import numpy as np
 import torch
+from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
@@ -18,59 +20,65 @@ from utils.path_utils import check_path_accessible, image_path_to_xml_path
 class DocumentSeparationDataset(Dataset):
     def __init__(
         self,
-        image_paths: Sequence[Sequence[Path]],
-        target: Optional[Sequence[Sequence[int]]] = None,
+        image_paths: Sequence[Sequence[Sequence[Path]]],
+        target: Optional[Sequence[Sequence[Sequence[int]]]] = None,
         number_of_images=3,
         randomize_document_order=False,
+        sample_same_inventory=True,
+        wrap_round=False,
+        connect_inventories=False,
         transform=None,
     ):
-
+        self.image_paths = image_paths
         self.idx_to_idcs = {}
         idx = 0
-        self.doc_lengths = []
+        self.doc_lengths = defaultdict(list)
+        self.inventory_lengths = []
 
-        for i, doc_i in enumerate(image_paths):
-            self.doc_lengths.append(len(doc_i))
-            if len(doc_i) < 1:
-                raise ValueError(f"Document {i} does not contain any images")
-            for j, path_i in enumerate(doc_i):
-                check_path_accessible(path_i)
-                xml_path_i = image_path_to_xml_path(path_i)
-                self.idx_to_idcs[idx] = (i, j)
-                idx += 1
+        for i, inventory_i in enumerate(image_paths):
+            for j, doc_j in enumerate(inventory_i):
+                if len(doc_j) < 1:
+                    raise ValueError(f"Document {i} in inventory {inventory_i} has no images")
+                for k, path_i in enumerate(doc_j):
+                    check_path_accessible(path_i)
+                    xml_path_i = image_path_to_xml_path(path_i)
+                    self.idx_to_idcs[idx] = (i, j, k)
+                    idx += 1
 
-        self.len = sum(self.doc_lengths)
-        self.image_paths = image_paths
+        self.len = idx
 
         if target is not None:
             self.target = target
         else:
-            # If no target is provided, assume that the first image in the document is the target
             self.target = []
+            # If no target is provided, assume that the first image in the document is the target
             for i in range(len(image_paths)):
-                self.target.append([0] * len(image_paths[i]))
-                self.target[i][0] = 1
+                _target_inventory = []
+                for j in range(len(image_paths[i])):
+                    _target_document = [1] + [0] * (len(image_paths[i][j]) - 1)
+                    _target_inventory.append(_target_document)
+                self.target.append(_target_inventory)
 
         assert number_of_images > 0, "Number of images must be greater than 0"
         self.number_of_images = number_of_images
         self.randomize_document_order = randomize_document_order
+        self.sample_same_inventory = sample_same_inventory
+        self.wrap_round = wrap_round
+        self.connect_inventories = connect_inventories
         self.transform = transform
 
     def __len__(self):
         return self.len
 
     @functools.lru_cache(maxsize=16)
-    def get_image(self, i, j):
-        image_path = self.image_paths[i][j]
-        data = load_image_array_from_path(image_path)
-        if data is None:
-            raise ValueError(f"Could not load image from path {image_path}")
-        image = data["image"]
+    def get_image(self, i, j, k):
+        image_path = self.image_paths[i][j][k]
+        image = Image.open(image_path)
         return image
 
     @functools.lru_cache(maxsize=16)
-    def get_text(self, i, j):
-        xml_path = image_path_to_xml_path(self.image_paths[i][j])
+    def get_text(self, i, j, k):
+        xml_path = image_path_to_xml_path(self.image_paths[i][j][k])
         page_data = PageData(xml_path)
         page_data.parse()
         text = page_data.get_transcription()
@@ -87,33 +95,63 @@ class DocumentSeparationDataset(Dataset):
             total_text += text_line
         return total_text
 
-    def start_of_document(self, i, j):
-        return j == 0
+    def out_of_bounds(self, i, j, k):
+        return (
+            i < 0
+            or j < 0
+            or k < 0
+            or i >= len(self.image_paths)
+            or j >= len(self.image_paths[i])
+            or k >= len(self.image_paths[i][j])
+        )
 
-    def end_of_document(self, i, j):
-        return j == self.doc_lengths[i] - 1
+    def start_of_inventory(self, i, j, k):
+        return j == 0 and k == 0
 
-    def is_first_document(self, i, j):
-        return i == 0 and j == 0
+    def end_of_inventory(self, i, j, k):
+        return j == len(self.image_paths[i]) - 1 and k == len(self.image_paths[i][j]) - 1
 
-    def is_last_document(self, i, j):
-        return i == len(self.image_paths) - 1 and j == self.doc_lengths[-1] - 1
+    def start_of_document(self, i, j, k):
+        return k == 0
 
-    def get_next_scan(self, i, j):
-        if self.end_of_document(i, j):
-            if self.is_last_document(i, j):
-                return 0, 0
-            return i + 1, 0
+    def end_of_document(self, i, j, k):
+        return k == len(self.image_paths[i][j]) - 1
+
+    def is_first_document(self, i, j, k):
+        return i == 0 and j == 0 and k == 0
+
+    def is_last_document(self, i, j, k):
+        return i == len(self.image_paths) - 1 and j == len(self.image_paths[i]) - 1 and k == len(self.image_paths[i][j]) - 1
+
+    def get_next_scan(self, i, j, k):
+        if self.end_of_document(i, j, k):
+            if self.end_of_inventory(i, j, k):
+                if self.is_last_document(i, j, k):
+                    if self.wrap_round:
+                        return 0, 0, 0
+                    else:
+                        return i, j, k + 1
+                else:
+                    return i + 1, 0, 0
+            else:
+                return i, j + 1, 0
         else:
-            return i, j + 1
+            return i, j, k + 1
 
-    def get_previous_scan(self, i, j):
-        if self.start_of_document(i, j):
-            if self.is_first_document(i, j):
-                return len(self.image_paths) - 1, self.doc_lengths[-1] - 1
-            return i - 1, self.doc_lengths[i - 1] - 1
+    def get_previous_scan(self, i, j, k):
+        if self.start_of_document(i, j, k):
+            if self.start_of_inventory(i, j, k):
+                if self.is_first_document(i, j, k):
+                    if self.wrap_round:
+                        return len(self.image_paths) - 1, len(self.image_paths[-1]) - 1, len(self.image_paths[-1][-1]) - 1
+                    else:
+                        return i, j, k - 1
+                else:
+                    return i - 1, len(self.image_paths[i - 1]) - 1, len(self.image_paths[i - 1][-1]) - 1
+            else:
+                return i, j - 1, len(self.image_paths[i][j - 1]) - 1
         else:
-            return i, j - 1
+            return i, j, k - 1
 
     # https://stackoverflow.com/a/64015315
     @staticmethod
@@ -125,19 +163,27 @@ class DocumentSeparationDataset(Dataset):
         # shift values to avoid the excluded number
         return choices + (choices >= excluding)
 
-    def get_random_previous_scan(self, i, j):
-        if self.start_of_document(i, j):
-            random_i = self.random_choice_except(len(self.image_paths), i)
-            return random_i, self.doc_lengths[random_i] - 1
+    def get_random_next_scan(self, i, j, k):
+        if self.end_of_document(i, j, k):
+            if not self.sample_same_inventory:
+                random_i = self.random_choice_except(len(self.image_paths), i)
+            else:
+                random_i = i
+            random_j = self.random_choice_except(len(self.image_paths[random_i]), j)
+            return random_i, random_j, 0
         else:
-            return i, j - 1
+            return i, j, k + 1
 
-    def get_random_next_scan(self, i, j):
-        if self.end_of_document(i, j):
-            random_i = self.random_choice_except(len(self.image_paths), i)
-            return random_i, 0
+    def get_random_previous_scan(self, i, j, k):
+        if self.start_of_document(i, j, k):
+            if not self.sample_same_inventory:
+                random_i = self.random_choice_except(len(self.image_paths), i)
+            else:
+                random_i = i
+            random_j = self.random_choice_except(len(self.image_paths[random_i]), j)
+            return random_i, random_j, len(self.image_paths[random_i][random_j]) - 1
         else:
-            return i, j + 1
+            return i, j, k - 1
 
     def __getitem__(self, idx):
         steps_back = self.number_of_images // 2
@@ -145,40 +191,40 @@ class DocumentSeparationDataset(Dataset):
 
         if self.randomize_document_order:
             idcs = []
-            i, j = self.idx_to_idcs[idx]
+            i, j, k = self.idx_to_idcs[idx]
 
             # Steps back
-            prev_i, prev_j = i, j
+            prev_i, prev_j, prev_k = i, j, k
             for _ in range(steps_back):
-                prev_i, prev_j = self.get_random_previous_scan(prev_i, prev_j)
-                idcs.append((prev_i, prev_j))
+                prev_i, prev_j, prev_k = self.get_random_previous_scan(prev_i, prev_j, prev_k)
+            idcs.append((prev_i, prev_j, prev_k))
 
             # Current
-            idcs.append((i, j))
+            idcs.append((i, j, k))
 
             # Steps forward
-            next_i, next_j = i, j
+            next_i, next_j, next_k = i, j, k
             for _ in range(steps_forward):
-                next_i, next_j = self.get_random_next_scan(next_i, next_j)
-                idcs.append((next_i, next_j))
+                next_i, next_j, next_k = self.get_random_next_scan(next_i, next_j, next_k)
+            idcs.append((next_i, next_j, next_k))
         else:
             idcs = []
-            i, j = self.idx_to_idcs[idx]
+            i, j, k = self.idx_to_idcs[idx]
 
             # Steps back
-            prev_i, prev_j = i, j
+            prev_i, prev_j, prev_k = i, j, k
             for _ in range(steps_back):
-                prev_i, prev_j = self.get_previous_scan(prev_i, prev_j)
-                idcs.append((prev_i, prev_j))
+                prev_i, prev_j, prev_k = self.get_previous_scan(prev_i, prev_j, prev_k)
+            idcs.append((prev_i, prev_j, prev_k))
 
             # Current
-            idcs.append((i, j))
+            idcs.append((i, j, k))
 
             # Steps forward
-            next_i, next_j = i, j
+            next_i, next_j, next_k = i, j, k
             for _ in range(steps_forward):
-                next_i, next_j = self.get_next_scan(next_i, next_j)
-                idcs.append((next_i, next_j))
+                next_i, next_j, next_k = self.get_next_scan(next_i, next_j, next_k)
+            idcs.append((next_i, next_j, next_k))
 
         targets = []
         _images = []
@@ -186,13 +232,21 @@ class DocumentSeparationDataset(Dataset):
         shapes = []
         targets = []
         image_paths = []
-        for i, j in idcs:
-            target = self.target[i][j]
-            image = self.get_image(i, j)
-            shape = image.shape[:2]
-            text = self.get_text(i, j)
+        for i, j, k in idcs:
+            if self.out_of_bounds(i, j, k):
+                _images.append(None)
+                shapes.append((0, 0))
+                texts.append("")
+                targets.append(0)
+                image_paths.append("")
+                continue
 
-            image_paths.append(self.image_paths[i][j])
+            image = self.get_image(i, j, k)
+            shape = image.size[1], image.size[0]  # H, W
+            text = self.get_text(i, j, k)
+            target = self.target[i][j][k]
+
+            image_paths.append(self.image_paths[i][j][k])
             targets.append(target)
             _images.append(image)
             shapes.append(shape)
@@ -200,13 +254,14 @@ class DocumentSeparationDataset(Dataset):
 
         images = []
         if self.transform is None:
-            for image in _images:
-                image = transforms.ToTensor()(image)
-                images.append(image)
-        elif isinstance(self.transform, SmartCompose):
+            self.transform = transforms.Compose([transforms.ToTensor()])
+        if isinstance(self.transform, SmartCompose):
             images = self.transform(_images)
         else:
             for image in _images:
+                if image is None:
+                    images.append(None)
+                    continue
                 image = self.transform(image)
                 images.append(image)
 
