@@ -2,7 +2,6 @@ import argparse
 import sys
 from pathlib import Path
 
-import pytorch_lightning as pl
 import torch
 import torch.utils.data
 from torchmetrics import ConfusionMatrix
@@ -12,9 +11,8 @@ from tqdm import tqdm
 sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))
 from core.trainer import ClassificationModel
 from data.augmentations import PadToMaxSize, SmartCompose
-from data.convert_xlsx import link_with_paths, read_xlsx
+from data.convert_xlsx import link_with_paths
 from data.dataloader import collate_fn
-from data.datamodule import DocumentSeparationModule
 from data.dataset import DocumentSeparationDataset
 from models.model import DocumentSeparator, ImageEncoder, TextEncoder
 from models.rules_based import RulesBased
@@ -51,8 +49,7 @@ def main(args: argparse.Namespace):
         ]
     )
 
-    xlsx_data = read_xlsx(xlsx_file)
-    val_paths = link_with_paths(xlsx_data, val_paths)
+    val_paths = link_with_paths(xlsx_file, val_paths)
 
     dataset = DocumentSeparationDataset(
         image_paths=val_paths,
@@ -73,8 +70,8 @@ def main(args: argparse.Namespace):
         output_size=2,
     )
 
-    def get_middle_scan(y, N):
-        i = N // 2
+    def get_middle_scan(y):
+        i = y.shape[1] // 2
         return y[:, i]
 
     if args.checkpoint:
@@ -88,10 +85,10 @@ def main(args: argparse.Namespace):
     confusion_matrix_rules = ConfusionMatrix(task="multiclass", num_classes=2).to(model.device)
     for batch in tqdm(val_dataloader):
         x, y = model.split_input(batch)
-        y = get_middle_scan(y, y.shape[1])
+        y = get_middle_scan(y)
 
         y_hat_model = model(x)
-        y_hat_model = get_middle_scan(y_hat_model, y_hat_model.shape[1])
+        y_hat_model = get_middle_scan(y_hat_model)
         y_hat_model = torch.argmax(y_hat_model, dim=1)
         confusion_matrix_model.update(y_hat_model, y.to(model.device))
 

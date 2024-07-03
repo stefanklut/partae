@@ -41,13 +41,14 @@ def spinque_link_to_data(spinque_link: str, inventory_number: Optional[str] = No
     return inventory_number, page_number
 
 
-def extract_start_of_documents(data):
+def extract_start_of_documents(data, link_columns: Container = ["Start of document"]):
     start_of_document_dict = defaultdict(lambda: defaultdict(int))
     for sheet, values in data.items():
         inventory_number = sheet
         for key, value in values.items():
-            if key == "Start of document":
-                for i, spinque_link in enumerate(value):
+            value = [v for v in value if v is not None]
+            if key in link_columns:
+                for spinque_link in value:
                     inventory_number, page_number = spinque_link_to_data(spinque_link, inventory_number)
                     start_of_document_dict[inventory_number][page_number] = 1
 
@@ -72,8 +73,14 @@ def path_to_inventory_page_number(path: Path):
         raise ValueError(f"Path {path} does not match the expected format")
 
 
-def link_with_paths(data: Mapping[str, Mapping[str, list[Path]]], paths: Sequence[Path]) -> list[list[Path]]:
-    start_of_documents = extract_start_of_documents(data)
+def link_with_paths(
+    xlsx_file: Path,
+    paths: Sequence[Path],
+    ignored_sheets: Optional[Container] = None,
+    link_columns: list[str] = ["Start of document", "URL nieuw document op volgorde"],
+) -> list[list[list[Path]]]:
+    data: Mapping[str, Mapping[str, list[Path]]] = read_xlsx(xlsx_file, ignored_sheets=ignored_sheets)
+    start_of_documents: Mapping[str, Mapping[int, int]] = extract_start_of_documents(data, link_columns=link_columns)
 
     all_documents = []
     inventory_documents = []
@@ -82,6 +89,8 @@ def link_with_paths(data: Mapping[str, Mapping[str, list[Path]]], paths: Sequenc
     # Just sort the paths to make sure they are in the right order
     for path in natsorted(paths):
         inventory_number, page_number, skip = path_to_inventory_page_number(path)
+        if inventory_number not in start_of_documents:
+            continue
         if current_inventory_number is None:
             current_inventory_number = inventory_number
             current_document = [path]
@@ -119,7 +128,8 @@ if __name__ == "__main__":
     paths = list(Path("~/Downloads/ushmm_test/").expanduser().rglob("*.jpg"))
     paths = natsorted(paths)
     print(len(paths))
-    documents = link_with_paths(read_xlsx(Path("~/Downloads/based_on_size.xlsx").expanduser()), paths)
+    documents = link_with_paths(Path("/home/stefan/Downloads/Documentsegmentatie_GT.xlsx"), paths)
+    print(documents)
     for document in documents:
         print(len(document))
 

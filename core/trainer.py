@@ -8,7 +8,7 @@ from torchvision import datasets, transforms
 
 
 class ClassificationModel(pl.LightningModule):
-    def __init__(self, model, learning_rate=1e-4):
+    def __init__(self, model, learning_rate=1e-5):
         super(ClassificationModel, self).__init__()
         self.model = model
         self.learning_rate = learning_rate

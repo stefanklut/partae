@@ -9,7 +9,7 @@ from natsort import natsorted
 from torch.utils.data import DataLoader
 
 sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))
-from data.convert_xlsx import link_with_paths, read_xlsx
+from data.convert_xlsx import link_with_paths
 from data.dataloader import collate_fn
 from data.dataset import DocumentSeparationDataset
 
@@ -34,6 +34,7 @@ def split_training_paths(
     # Shuffle the groups
     random.seed(seed)
     random.shuffle(grouped_training_paths)
+    random.seed()
 
     # Split the groups
     split_idx = int(len(grouped_training_paths) * split_ratio)
@@ -58,7 +59,7 @@ class DocumentSeparationModule(pl.LightningDataModule):
         self.training_paths = training_paths
 
         if val_paths is None:
-            # split training paths 80/20
+            # split training paths into training and validation paths
             self.training_paths, self.val_paths = split_training_paths(self.training_paths, split_ratio=0.9, seed=101)
         else:
             self.val_paths = val_paths
@@ -74,9 +75,8 @@ class DocumentSeparationModule(pl.LightningDataModule):
         pass
 
     def setup(self, stage=None):
-        xlsx_data = read_xlsx(self.xlsx_file)
-        training_paths = link_with_paths(xlsx_data, self.training_paths)
-        val_paths = link_with_paths(xlsx_data, self.val_paths)
+        training_paths = link_with_paths(self.xlsx_file, self.training_paths)
+        val_paths = link_with_paths(self.xlsx_file, self.val_paths)
 
         if stage == "fit" or stage is None:
             self.train_dataset = DocumentSeparationDataset(

@@ -75,6 +75,7 @@ def main(args: argparse.Namespace):
             image_encoder=ImageEncoder(merge_to_batch=True),
             text_encoder=TextEncoder(merge_to_batch=True),
         )
+        learning_rate=1e-5,
     )
 
     logger = TensorBoardLogger("lightning_logs", name="document_separator")
