@@ -189,7 +189,7 @@ class DocumentSeparator(nn.Module):
         inverted_shapes = 1 / shapes
 
         if torch.logical_xor(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0).any():
-            raise ValueError("One of the shapes is 0, both should be 0 or both should be non-zero")
+            raise ValueError("One of the shapes is 0, both should be 0 (no image) or both should be non-zero (normal image)")
 
         ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
         ratio_shapes = torch.where(
