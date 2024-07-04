@@ -8,12 +8,14 @@ def collate_fn(batch):
     texts = []
     targets = []
     image_paths = []
+    idcs = []
     for item in batch:
         _images.append(item["images"])
         shapes.append(item["shapes"])
         texts.append(item["texts"])
         targets.append(item["targets"])
         image_paths.append(item["image_paths"])
+        idcs.append(item["idcs"])
 
     # Pad to the same size
     max_shape = np.max([image.size()[-2:] for sub_images in _images for image in sub_images if image is not None], axis=0)
@@ -31,5 +33,6 @@ def collate_fn(batch):
     images = torch.stack(images)
     shapes = torch.tensor(shapes)
     targets = torch.tensor(targets)
+    idcs = torch.tensor(idcs)
 
-    return {"images": images, "shapes": shapes, "texts": texts, "targets": targets, "image_paths": image_paths}
+    return {"images": images, "shapes": shapes, "texts": texts, "targets": targets, "image_paths": image_paths, "idcs": idcs}

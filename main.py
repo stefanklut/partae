@@ -17,6 +17,8 @@ from utils.input_utils import get_file_paths, supported_image_formats
 
 torch.set_float32_matmul_precision("high")
 
+torch.autograd.set_detect_anomaly(True)
+
 
 def get_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Main file for Document Separation")

@@ -232,7 +232,9 @@ class DocumentSeparationDataset(Dataset):
         shapes = []
         targets = []
         image_paths = []
+        _idcs = []
         for i, j, k in idcs:
+            _idcs.append((i, j, k))
             if self.out_of_bounds(i, j, k):
                 _images.append(None)
                 shapes.append((0, 0))
@@ -242,6 +244,7 @@ class DocumentSeparationDataset(Dataset):
                 continue
 
             image = self.get_image(i, j, k)
+
             shape = image.size[1], image.size[0]  # H, W
             text = self.get_text(i, j, k)
             target = self.target[i][j][k]
@@ -265,23 +268,32 @@ class DocumentSeparationDataset(Dataset):
                 image = self.transform(image)
                 images.append(image)
 
-        return {"images": images, "shapes": shapes, "texts": texts, "targets": targets, "image_paths": image_paths}
+        return {
+            "images": images,
+            "shapes": shapes,
+            "texts": texts,
+            "targets": targets,
+            "image_paths": image_paths,
+            "idcs": _idcs,
+        }
 
 
 if __name__ == "__main__":
     test_image_paths = [
         [
-            Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0001.jpg"),
-            Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0002.jpg"),
-        ],
-        [Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0003.jpg")],
-        [Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0004.jpg")],
-        [
-            Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0005.jpg"),
-            Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0006.jpg"),
-            Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0007.jpg"),
-        ],
-        [Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0008.jpg")],
+            [
+                Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0001.jpg"),
+                Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0002.jpg"),
+            ],
+            [Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0003.jpg")],
+            [Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0004.jpg")],
+            [
+                Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0005.jpg"),
+                Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0006.jpg"),
+                Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0007.jpg"),
+            ],
+            [Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0008.jpg")],
+        ]
     ]
     transform = transforms.Compose([transforms.ToTensor(), transforms.Resize((224, 224))])
     dataset = DocumentSeparationDataset(test_image_paths, transform=transform)
@@ -296,3 +308,18 @@ if __name__ == "__main__":
     print(item["targets"].size())
     # Text size is not fixed, so it is a list of lists
     print(len(item["texts"]), len(item["texts"][0]))
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    for i in range(len(item["images"])):
+        for j in range(len(item["images"][i])):
+            print(item["texts"][i][j])
+            print(item["targets"][i][j])
+            print(item["shapes"][i][j])
+            print(item["image_paths"][i][j])
+            print(item["idcs"][i][j])
+            image = item["images"][i][j]
+            image = image.permute(1, 2, 0).numpy()
+            plt.imshow(image)
+            plt.show()
