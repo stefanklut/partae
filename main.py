@@ -17,8 +17,6 @@ from utils.input_utils import get_file_paths, supported_image_formats
 
 torch.set_float32_matmul_precision("high")
 
-torch.autograd.set_detect_anomaly(True)
-
 
 def get_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Main file for Document Separation")
@@ -102,6 +100,7 @@ def main(args: argparse.Namespace):
         callbacks=[checkpointer],
         val_check_interval=0.25,
         logger=logger,
+        detect_anomaly=True,
     )
 
     trainer.fit(model, data_module)
