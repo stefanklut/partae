@@ -188,8 +188,12 @@ class DocumentSeparator(nn.Module):
 
     def forward(self, x):
         images = x["images"]
-        texts = x["texts"]
         shapes = x["shapes"]
+        texts = x["texts"]
+
+        images = images.to(self.device)
+        shapes = shapes.to(self.device)
+
         images = self.image_encoder(images)
         texts = self.text_encoder(texts)
 
@@ -199,12 +203,13 @@ class DocumentSeparator(nn.Module):
         both_zero = torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0)
 
         inverted_shapes = 1 / shapes
-        inverted_shapes = torch.where(both_zero, torch.tensor(0), inverted_shapes)
+        inverted_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), inverted_shapes)
         ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
-        ratio_shapes = torch.where(both_zero, torch.tensor(0), ratio_shapes)
+        ratio_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), ratio_shapes)
 
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
         # x = torch.cat([images, texts], dim=2)  # (B, N, 1024)
+
         x = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
         x = self.dropout(x)
         x, _ = self.lstm(x)  # (B, N, 1024)
