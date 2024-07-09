@@ -29,9 +29,8 @@ class ClassificationModel(pl.LightningModule):
         x = batch
         return x, y
 
-    def get_middle_scan(self, y, N):
-        i = N // 2
-        return y[:, i]
+    def get_middle_scan(self, y):
+        return y[:, y.shape[1] // 2]
 
     def training_step(self, batch, batch_idx):
         x, y = self.split_input(batch)
@@ -42,7 +41,7 @@ class ClassificationModel(pl.LightningModule):
 
         loss = F.cross_entropy(y_hat.view(-1, 2), y.view(-1), weight=self.weight.to(y.device))
         acc = self.train_accuracy(y_hat.view(-1, 2), y.view(-1))
-        center_acc = self.train_accuracy(self.get_middle_scan(y_hat, N), self.get_middle_scan(y, N))
+        center_acc = self.train_accuracy(self.get_middle_scan(y_hat), self.get_middle_scan(y))
 
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
         self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
@@ -58,7 +57,7 @@ class ClassificationModel(pl.LightningModule):
 
         loss = F.cross_entropy(y_hat.view(-1, 2), y.view(-1), weight=self.weight.to(y.device))
         acc = self.val_accuracy(y_hat.view(-1, 2), y.view(-1))
-        center_acc = self.val_accuracy(self.get_middle_scan(y_hat, N), self.get_middle_scan(y, N))
+        center_acc = self.val_accuracy(self.get_middle_scan(y_hat), self.get_middle_scan(y))
 
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
         self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)

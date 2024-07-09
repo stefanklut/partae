@@ -21,15 +21,17 @@ class DocumentSeparationDataset(Dataset):
     def __init__(
         self,
         image_paths: Sequence[Sequence[Sequence[Path]]],
+        mode: str = "train",
         target: Optional[Sequence[Sequence[Sequence[int]]]] = None,
         number_of_images=3,
         randomize_document_order=False,
         sample_same_inventory=True,
         wrap_round=False,
-        connect_inventories=False,
         transform=None,
     ):
         self.image_paths = image_paths
+        assert mode in ["train", "val", "test"], "Mode must be one of 'train', 'val', 'test'"
+        self.mode = mode
         self.idx_to_idcs = {}
         idx = 0
         self.doc_lengths = defaultdict(list)
@@ -47,25 +49,25 @@ class DocumentSeparationDataset(Dataset):
 
         self.len = idx
 
-        if target is not None:
-            self.target = target
-        else:
-            self.target = []
-            # If no target is provided, assume that the first image in the document is the target
-            for i in range(len(image_paths)):
-                _target_inventory = []
-                for j in range(len(image_paths[i])):
-                    _target_document = [1] + [0] * (len(image_paths[i][j]) - 1)
-                    _target_inventory.append(_target_document)
-                self.target.append(_target_inventory)
-
         assert number_of_images > 0, "Number of images must be greater than 0"
         self.number_of_images = number_of_images
         self.randomize_document_order = randomize_document_order
         self.sample_same_inventory = sample_same_inventory
         self.wrap_round = wrap_round
-        self.connect_inventories = connect_inventories
         self.transform = transform
+
+        if self.mode in ["train", "val"]:
+            if target is not None:
+                self.target = target
+            else:
+                self.target = []
+                # If no target is provided, assume that the first image in the document is the target
+                for i in range(len(image_paths)):
+                    _target_inventory = []
+                    for j in range(len(image_paths[i])):
+                        _target_document = [1] + [0] * (len(image_paths[i][j]) - 1)
+                        _target_inventory.append(_target_document)
+                    self.target.append(_target_inventory)
 
     def __len__(self):
         return self.len
@@ -236,24 +238,28 @@ class DocumentSeparationDataset(Dataset):
         for i, j, k in idcs:
             _idcs.append((i, j, k))
             if self.out_of_bounds(i, j, k):
-                _images.append(None)
-                shapes.append((0, 0))
-                texts.append("")
-                targets.append(0)
-                image_paths.append("")
-                continue
+                image = None
+                shape = (0, 0)
+                text = ""
+                if self.mode in ["train", "val"]:
+                    target = 0
+                image_path = ""
 
-            image = self.get_image(i, j, k)
+            else:
 
-            shape = image.size[1], image.size[0]  # H, W
-            text = self.get_text(i, j, k)
-            target = self.target[i][j][k]
+                image = self.get_image(i, j, k)
+                shape = image.size[1], image.size[0]  # H, W
+                text = self.get_text(i, j, k)
+                if self.mode in ["train", "val"]:
+                    target = self.target[i][j][k]
+                image_path = self.image_paths[i][j][k]
 
-            image_paths.append(self.image_paths[i][j][k])
-            targets.append(target)
+            image_paths.append(image_path)
             _images.append(image)
             shapes.append(shape)
             texts.append(text)
+            if self.mode in ["train", "val"]:
+                targets.append(target)
 
         images = []
         if self.transform is None:
@@ -268,14 +274,13 @@ class DocumentSeparationDataset(Dataset):
                 image = self.transform(image)
                 images.append(image)
 
-        return {
-            "images": images,
-            "shapes": shapes,
-            "texts": texts,
-            "targets": targets,
-            "image_paths": image_paths,
-            "idcs": _idcs,
-        }
+        output = {"images": images, "shapes": shapes, "texts": texts, "image_paths": image_paths}
+
+        if self.mode in ["train", "val"]:
+            output["targets"] = targets
+            output["idcs"] = _idcs
+
+        return output
 
 
 if __name__ == "__main__":

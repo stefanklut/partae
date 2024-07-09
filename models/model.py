@@ -98,6 +98,9 @@ class ImageEncoder(nn.Module):
             # Recombine the encoded images
             encoded_images = torch.stack(encoded_images_list, dim=1)  # (B, N, 512)
 
+        # if torch.isnan(encoded_images).any():
+        #     raise ValueError("NaN values in the encoded images")
+
         return encoded_images
 
 
@@ -158,6 +161,10 @@ class TextEncoder(nn.Module):
 
             # Recombine the encoded documents
             encoded_texts: torch.Tensor = torch.stack(encoded_texts_list, dim=1)  # (B, N, 512)
+
+        # if torch.isnan(encoded_texts).any():
+        #     raise ValueError("NaN values in the encoded texts")
+
         return encoded_texts
 
 
@@ -168,11 +175,11 @@ class DocumentSeparator(nn.Module):
         self.text_encoder = text_encoder
         self.lstm = nn.LSTM(input_size=1027, hidden_size=512, num_layers=1, batch_first=True, bidirectional=True)
         self.fc = nn.Sequential(
-            LazyLinearBlock(1024, dropout=0.5),
-            LinearBlock(1024, 512, dropout=0.5),
+            LazyLinearBlock(1024, dropout=0.0),
+            LinearBlock(1024, 512, dropout=0.0),
             nn.Linear(512, output_size),
         )
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(0.0)
 
     @property
     @lru_cache
@@ -186,15 +193,15 @@ class DocumentSeparator(nn.Module):
         images = self.image_encoder(images)
         texts = self.text_encoder(texts)
 
-        inverted_shapes = 1 / shapes
-
         if torch.logical_xor(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0).any():
             raise ValueError("One of the shapes is 0, both should be 0 (no image) or both should be non-zero (normal image)")
 
+        both_zero = torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0)
+
+        inverted_shapes = 1 / shapes
+        inverted_shapes = torch.where(both_zero, torch.tensor(0), inverted_shapes)
         ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
-        ratio_shapes = torch.where(
-            torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0), torch.tensor(0), ratio_shapes
-        )
+        ratio_shapes = torch.where(both_zero, torch.tensor(0), ratio_shapes)
 
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
         # x = torch.cat([images, texts], dim=2)  # (B, N, 1024)
@@ -204,6 +211,9 @@ class DocumentSeparator(nn.Module):
         # x = torch.concat([x, inverted_shapes.to(self.device), ratio_shapes.to(self.device)], dim=2)
         # x = torch.concat([x, inverted_shapes.to(self.device)], dim=2)
         x = self.fc(x)
+
+        # if torch.isnan(x).any():
+        #     raise ValueError("NaN values in the output")
         return x
 
 

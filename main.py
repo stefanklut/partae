@@ -66,9 +66,9 @@ def main(args: argparse.Namespace):
         val_paths=val_paths,
         xlsx_file=xlsx_file,
         transform=transform,
-        batch_size=4,
+        batch_size=32,
         number_of_images=3,
-        num_workers=8,
+        num_workers=16,
     )
     model = ClassificationModel(
         model=DocumentSeparator(
