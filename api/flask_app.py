@@ -4,15 +4,19 @@ import sys
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Optional, TypedDict
 
 import numpy as np
 import torch
 from flask import Flask, Response, abort, jsonify, request
+from PIL import Image
 from prometheus_client import Counter, Gauge, generate_latest
+from torchvision.transforms import Resize, ToTensor
 
 sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))  # noqa: E402
+from data.augmentations import PadToMaxSize, SmartCompose
 from page_xml.xmlPAGE import PageData
 from run import Predictor
 from utils.image_utils import load_image_array_from_bytes
@@ -122,7 +126,7 @@ def predict_class(
 
         image_path = get_middle_path(data["image_paths"])
 
-        output_path = output_base_path.joinpath(identifier, image_path)
+        output_path = output_base_path.joinpath(identifier, image_path.name).with_suffix(".txt")
         if predict_wrapper.predictor is None:
             raise TypeError("The current Predictor is not initialized")
 
@@ -131,11 +135,11 @@ def predict_class(
 
         outputs = predict_wrapper.predictor(data)
 
-        output_class = torch.argmax(outputs, dim=2).cpu().numpy()
-        output_class = get_middle_scan(output_class)
+        outputs = outputs.cpu().numpy()
+        output_middle = get_middle_scan(outputs)
 
         with open(output_path, "w") as file:
-            file.write(str(output_class.item()))
+            file.write(str(output_middle.item()))
 
         images_processed_counter.inc()
         return input_args
@@ -184,6 +188,7 @@ def abort_with_info(
     if info is None:
         info = ResponseInfo(status_code=status_code)  # type: ignore
     info["error_message"] = error_message
+    info["status_code"] = status_code
     response = jsonify(info)
     response.status_code = status_code
     abort(response)
@@ -232,15 +237,20 @@ def predict() -> tuple[Response, int]:
 
     try:
         post_file = request.files.getlist("images[]")
+        if len(post_file) == 0:
+            raise KeyError("No image in form")
     except KeyError as error:
         abort_with_info(400, "Missing image in form", response_info)
 
     try:
         post_text = request.files.getlist("texts[]")
+        if len(post_text) == 0:
+            raise KeyError("No text in form")
     except KeyError as error:
         abort_with_info(400, "Missing text in form", response_info)
 
-    assert len(post_file) == len(post_text), "Number of images and texts must be the same"
+    if len(post_file) != len(post_text):
+        abort_with_info(400, "Number of images and texts do not match", response_info)
 
     # TODO Maybe make slightly more stable/predicable, https://docs.python.org/3/library/threading.html#threading.Semaphore https://gist.github.com/frankcleary/f97fe244ef54cd75278e521ea52a697a
     queue_size = executor._work_queue.qsize()
@@ -249,51 +259,87 @@ def predict() -> tuple[Response, int]:
     if queue_size > max_queue_size:
         abort_with_info(429, "Exceeding queue size", response_info)
 
-    images = []
+    transform = SmartCompose(
+        [
+            ToTensor(),
+            PadToMaxSize(),
+            Resize((224, 224)),
+        ]
+    )
+
+    _images = []
     image_names = []
     for post_file_i in post_file:
-        if (image_name := post_file_i.filename) is not None:
-            image_name = Path(image_name)
+        if post_file_i.filename:
+            image_name = Path(post_file_i.filename)
             image_names.append(image_name)
             response_info["filename"] = str(image_name)
         else:
             abort_with_info(400, "Missing filename", response_info)
 
-        img_bytes = post_file_i.read()
-        image_data = load_image_array_from_bytes(img_bytes, image_path=image_name)
+        image_bytes = post_file_i.read()
+
+        if post_file_i.filename == "null" and image_bytes == b"":
+            _images.append(None)
+            continue
+
+        image_data = Image.open(BytesIO(image_bytes))
 
         if image_data is None:
             abort_with_info(500, "Image could not be loaded correctly", response_info)
 
+        _images.append(image_data)
+
     texts = []
     for post_text_i in post_text:
-        if (text_name := post_text_i.filename) is not None:
-            text_name = Path(text_name)
+        if post_text_i.filename:
+            text_name = Path(post_text_i.filename)
             response_info["filename"] = str(text_name)
         else:
             abort_with_info(400, "Missing filename", response_info)
 
         text_bytes = post_text_i.read()
-        page_data = PageData(text_bytes)
-        page_data.parse()
-        text = page_data.get_transcription()
-        total_text = ""
-        for _, text_line in text.items():
-            # If line ends with - then add it to the next line, otherwise add a space
-            text_line = text_line.strip()
-            if len(text_line) > 0:
-                if text_line[-1] == "-":
-                    text_line = text_line[:-1]
-                else:
-                    text_line += " "
+        if post_text_i.filename == "null" and text_bytes == b"":
+            texts.append("")
+            continue
+        xml = text_bytes.decode("utf-8")
+        page_data = PageData.from_string(xml, text_name)
+        text = page_data.get_combined_transcription()
 
-            total_text += text_line
+        texts.append(text)
 
-        texts.append(total_text)
+    for image, text in zip(_images, texts):
+        if image is None and not text:
+            continue
+        if image is None and text:
+            abort_with_info(400, "Empty image was send with text", response_info)
+
+    shapes = []
+    for image in _images:
+        if image is None:
+            shapes.append((0, 0))
+            continue
+        shapes.append((image.size[1], image.size[0]))
+
+    _images = transform(_images)
+
+    max_shape = np.max([image.size()[-2:] for image in _images if image is not None], axis=0)
+
+    for i in range(len(_images)):
+        if _images[i] is None:
+            _images[i] = torch.zeros((3, max_shape[0], max_shape[1]))
+        _images[i] = torch.nn.functional.pad(
+            _images[i],
+            (0, int(max_shape[1] - _images[i].size()[-1]), 0, int(max_shape[0] - _images[i].size()[-2])),
+            value=0,
+        )
+
+    images = torch.stack(_images).unsqueeze(0)
+    shapes = torch.tensor(shapes).unsqueeze(0)
 
     data = {
-        "images": torch.stack(images, dim=0).unsqueeze(0),
-        "shapes": torch.stack([image.shape[:2] for image in images], dim=0).unsqueeze(0),
+        "images": images,
+        "shapes": shapes,
         "texts": [texts],
         "image_paths": [image_names],
     }

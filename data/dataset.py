@@ -81,21 +81,9 @@ class DocumentSeparationDataset(Dataset):
     @functools.lru_cache(maxsize=16)
     def get_text(self, i, j, k):
         xml_path = image_path_to_xml_path(self.image_paths[i][j][k])
-        page_data = PageData(xml_path)
-        page_data.parse()
-        text = page_data.get_transcription()
-        total_text = ""
-        for _, text_line in text.items():
-            # If line ends with - then add it to the next line, otherwise add a space
-            text_line = text_line.strip()
-            if len(text_line) > 0:
-                if text_line[-1] == "-":
-                    text_line = text_line[:-1]
-                else:
-                    text_line += " "
-
-            total_text += text_line
-        return total_text
+        page_data = PageData.from_file(xml_path)
+        text = page_data.get_combined_transcription()
+        return text
 
     def out_of_bounds(self, i, j, k):
         return (

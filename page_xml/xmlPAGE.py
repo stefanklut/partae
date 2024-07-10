@@ -22,15 +22,14 @@ _VALID_TYPES = {tuple, list, str, int, float, bool, NoneType}
 class PageData:
     """Class to process PAGE xml files"""
 
-    def __init__(self, filepath: Path, creator=None):
+    def __init__(self, creator=None):
         """
         Args:
             filepath (string): Path to PAGE-xml file.
         """
         self.logger = logging.getLogger(get_logger_name())
-        self.filepath = filepath
-        self.name = self.filepath.stem
-        self.creator = "Laypa" if creator == None else creator
+
+        self.creator = "Separation" if creator == None else creator
 
         # REVIEW should this be replaced with the newer pageXML standard?
         self.XMLNS = {
@@ -44,20 +43,36 @@ class PageData:
             ),
         }
         self.size = None
-        # self.parse()
+        self.filepath = None
+        self.name = None
+
+        self.root = None
+        self.base = None
+
+    @classmethod
+    def from_file(cls, filepath: Path, creator=None):
+        instance = cls(creator=creator)
+        instance.filepath = filepath
+        instance.name = filepath.stem
+
+        tree = ET.parse(filepath)
+        instance.root = tree.getroot()
+        instance.base = "".join([instance.root.tag.rsplit("}", 1)[0], "}"])
+        return instance
+
+    @classmethod
+    def from_string(cls, xml_string: str, filepath: Path, creator=None):
+        instance = cls(creator=creator)
+        instance.filepath = filepath
+        instance.name = filepath.stem
+
+        tree = ET.ElementTree(ET.fromstring(xml_string))
+        instance.root = tree.getroot()
+        instance.base = "".join([instance.root.tag.rsplit("}", 1)[0], "}"])
+        return instance
 
     def set_size(self, size: tuple[int, int]):
         self.size = size
-
-    def parse(self):
-        """
-        Parse PAGE-XML file
-        """
-        tree = ET.parse(self.filepath)
-        # --- get the root of the data
-        self.root = tree.getroot()
-        # --- save "namespace" base
-        self.base = "".join([self.root.tag.rsplit("}", 1)[0], "}"])
 
     def get_region(self, region_name):
         """
@@ -219,6 +234,22 @@ class PageData:
 
         return data
 
+    def get_combined_transcription(self):
+        """Extracts text from each line on the XML file and combines them"""
+        text = self.get_transcription()
+        total_text = ""
+        for _, text_line in text.items():
+            # If line ends with - then add it to the next line, otherwise add a space
+            text_line = text_line.strip()
+            if len(text_line) > 0:
+                if text_line[-1] == "-":
+                    text_line = text_line[:-1]
+                else:
+                    text_line += " "
+
+            total_text += text_line
+        return total_text
+
     def write_transcriptions(self, out_dir):
         """write out one txt file per text line"""
         # for line, text in self.get_transcription().iteritems():
@@ -291,11 +322,11 @@ class PageData:
         """add baseline element ot parent line node"""
         ET.SubElement(parent, "Baseline").attrib = {"points": b_coords}
 
-    def save_xml(self):
+    def save_xml(self, filepath):
         """write out XML file of current PAGE data"""
         self._indent(self.xml)
         tree = ET.ElementTree(self.xml)
-        with AtomicFileName(self.filepath) as path:
+        with AtomicFileName(filepath) as path:
             tree.write(path, encoding="UTF-8", xml_declaration=True)
 
     def _indent(self, elem, level=0):

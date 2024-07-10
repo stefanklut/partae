@@ -90,12 +90,14 @@ class SmartCompose(torch.nn.Module):
             for transform in self.transforms:
                 image = transform(image)
             return image
-        if isinstance(image, list):
+        elif isinstance(image, list):
             for transform in self.transforms:
                 if not isinstance(transform, _ApplyToList):
                     transform = _ApplyToList(transform)
                 image = transform(image)
             return image
+        else:
+            raise ValueError(f"Expected input to be torch.Tensor or list, got {type(image)}")
 
     def __repr__(self) -> str:
         format_string = self.__class__.__name__ + "("
