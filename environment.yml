@@ -20,6 +20,7 @@ dependencies:
   - prometheus_client
   - imagesize
   - gunicorn
+  - openjpeg
   - pillow
   - natsort
   - termcolor

@@ -17,6 +17,8 @@ from data.dataset import DocumentSeparationDataset
 from models.model import DocumentSeparator, ImageEncoder, TextEncoder
 from utils.input_utils import get_file_paths, supported_image_formats
 
+torch.set_float32_matmul_precision("high")
+
 
 def get_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run file for Document Separation")
