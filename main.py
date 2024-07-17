@@ -28,6 +28,11 @@ def get_arguments() -> argparse.Namespace:
     )
     io_args.add_argument("-x", "--xlsx", help="XLSX file with labels", type=str, default=None)
 
+    io_args.add_argument("-c", "--checkpoint", help="Checkpoint file", type=str, default=None)
+
+    training_args = parser.add_argument_group("Training")
+    training_args.add_argument("-e", "--epochs", help="Number of epochs", type=int, default=10)
+
     args = parser.parse_args()
     return args
 
@@ -52,6 +57,8 @@ def main(args: argparse.Namespace):
     xlsx_file = Path(args.xlsx)
     if not xlsx_file.exists():
         raise FileNotFoundError(f"XLSX file {xlsx_file} does not exist")
+
+    checkpoint_path = Path(args.checkpoint)
 
     transform = SmartCompose(
         [
@@ -96,14 +103,13 @@ def main(args: argparse.Namespace):
     )
 
     trainer = Trainer(
-        max_epochs=3,
+        max_epochs=args.epochs,
         callbacks=[checkpointer],
         val_check_interval=0.25,
         logger=logger,
-        detect_anomaly=True,
     )
 
-    trainer.fit(model, data_module)
+    trainer.fit(model, data_module, ckpt_path=checkpoint_path)
 
 
 if __name__ == "__main__":
