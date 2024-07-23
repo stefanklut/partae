@@ -209,26 +209,25 @@ class DocumentSeparator(nn.Module):
 
         if self.turn_off_image:
             B, N, C, H, W = images.size()
-            images = torch.zeros((B, N, 512), device=images.device)
+            images = torch.zeros((B, N, 512), device=self.device)
         else:
             images = self.image_encoder(images)
 
         if self.turn_off_text:
             B, N = len(texts), len(texts[0])
-            texts = torch.zeros((B, N, 512), device=texts.device)
+            texts = torch.zeros((B, N, 512), device=self.device)
         else:
             texts = self.text_encoder(texts)
 
         if torch.logical_xor(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0).any():
             raise ValueError("One of the shapes is 0, both should be 0 (no image) or both should be non-zero (normal image)")
 
-        both_zero = torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0)
-
         if self.turn_off_shapes:
             B, N = len(shapes), len(shapes[0])
-            inverted_shapes = torch.zeros((B, N, 2), device=shapes.device)
-            ratio_shapes = torch.zeros((B, N, 1), device=shapes.device)
+            inverted_shapes = torch.zeros((B, N, 2), device=self.device)
+            ratio_shapes = torch.zeros((B, N, 1), device=self.device)
         else:
+            both_zero = torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0)
             inverted_shapes = 1 / shapes
             inverted_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), inverted_shapes)
             ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
