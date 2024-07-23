@@ -169,17 +169,30 @@ class TextEncoder(nn.Module):
 
 
 class DocumentSeparator(nn.Module):
-    def __init__(self, image_encoder, text_encoder, output_size=2):
+    def __init__(
+        self,
+        image_encoder,
+        text_encoder,
+        output_size=2,
+        dropout=0.0,
+        turn_off_image=False,
+        turn_off_text=False,
+        turn_off_shapes=False,
+    ):
         super(DocumentSeparator, self).__init__()
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
         self.lstm = nn.LSTM(input_size=1027, hidden_size=512, num_layers=1, batch_first=True, bidirectional=True)
         self.fc = nn.Sequential(
-            LazyLinearBlock(1024, dropout=0.0),
-            LinearBlock(1024, 512, dropout=0.0),
+            LazyLinearBlock(1024, dropout=dropout),
+            LinearBlock(1024, 512, dropout=dropout),
             nn.Linear(512, output_size),
         )
-        self.dropout = nn.Dropout(0.0)
+        self.dropout = nn.Dropout(dropout)
+
+        self.turn_off_image = turn_off_image
+        self.turn_off_text = turn_off_text
+        self.turn_off_shapes = turn_off_shapes
 
     @property
     @lru_cache
@@ -194,18 +207,32 @@ class DocumentSeparator(nn.Module):
         images = images.to(self.device)
         shapes = shapes.to(self.device)
 
-        images = self.image_encoder(images)
-        texts = self.text_encoder(texts)
+        if self.turn_off_image:
+            B, N, C, H, W = images.size()
+            images = torch.zeros((B, N, 512), device=images.device)
+        else:
+            images = self.image_encoder(images)
+
+        if self.turn_off_text:
+            B, N = len(texts), len(texts[0])
+            texts = torch.zeros((B, N, 512), device=texts.device)
+        else:
+            texts = self.text_encoder(texts)
 
         if torch.logical_xor(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0).any():
             raise ValueError("One of the shapes is 0, both should be 0 (no image) or both should be non-zero (normal image)")
 
         both_zero = torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0)
 
-        inverted_shapes = 1 / shapes
-        inverted_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), inverted_shapes)
-        ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
-        ratio_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), ratio_shapes)
+        if self.turn_off_shapes:
+            B, N = len(shapes), len(shapes[0])
+            inverted_shapes = torch.zeros((B, N, 2), device=shapes.device)
+            ratio_shapes = torch.zeros((B, N, 1), device=shapes.device)
+        else:
+            inverted_shapes = 1 / shapes
+            inverted_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), inverted_shapes)
+            ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
+            ratio_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), ratio_shapes)
 
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
         # x = torch.cat([images, texts], dim=2)  # (B, N, 1024)

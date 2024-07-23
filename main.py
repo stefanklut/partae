@@ -32,6 +32,17 @@ def get_arguments() -> argparse.Namespace:
 
     training_args = parser.add_argument_group("Training")
     training_args.add_argument("-e", "--epochs", help="Number of epochs", type=int, default=10)
+    training_args.add_argument("-b", "--batch_size", help="Batch size", type=int, default=32)
+    training_args.add_argument("-n", "--number_of_images", help="Number of images", type=int, default=3)
+    training_args.add_argument("--num_workers", help="Number of workers", type=int, default=16)
+    training_args.add_argument("--learning_rate", help="Learning rate", type=float, default=1e-5)
+    training_args.add_argument("--optimizer", help="Optimizer", type=str, default="Adam")
+
+    model_args = parser.add_argument_group("Model")
+    model_args.add_argument("--turn_off_image", help="Turn off image encoder", action="store_true")
+    model_args.add_argument("--turn_off_text", help="Turn off text encoder", action="store_true")
+    model_args.add_argument("--turn_off_shapes", help="Turn off shapes encoder", action="store_true")
+    model_args.add_argument("--dropout", help="Dropout", type=float, default=0.0)
 
     args = parser.parse_args()
     return args
@@ -58,7 +69,10 @@ def main(args: argparse.Namespace):
     if not xlsx_file.exists():
         raise FileNotFoundError(f"XLSX file {xlsx_file} does not exist")
 
-    checkpoint_path = Path(args.checkpoint)
+    if args.checkpoint is not None:
+        checkpoint_path = Path(args.checkpoint)
+    else:
+        checkpoint_path = None
 
     transform = SmartCompose(
         [
@@ -73,16 +87,20 @@ def main(args: argparse.Namespace):
         val_paths=val_paths,
         xlsx_file=xlsx_file,
         transform=transform,
-        batch_size=32,
-        number_of_images=3,
-        num_workers=16,
+        batch_size=args.batch_size,
+        number_of_images=args.number_of_images,
+        num_workers=args.num_workers,
     )
     model = ClassificationModel(
         model=DocumentSeparator(
             image_encoder=ImageEncoder(merge_to_batch=True),
             text_encoder=TextEncoder(merge_to_batch=True),
+            turn_off_image=args.turn_off_image,
+            turn_off_text=args.turn_off_text,
+            turn_off_shapes=args.turn_off_shapes,
+            dropout=args.dropout,
         ),
-        learning_rate=1e-5,
+        learning_rate=args.learning_rate,
     )
 
     logger = TensorBoardLogger("lightning_logs", name="document_separator")
@@ -94,17 +112,31 @@ def main(args: argparse.Namespace):
     with output_dir.joinpath("git_hash").open("w") as file:
         file.write(git_hash)
 
-    checkpointer = ModelCheckpoint(
+    # Save arguments to output directory
+    with output_dir.joinpath("arguments").open("w") as file:
+        for key, value in vars(args).items():
+            file.write(f"{key}: {value}\n")
+
+    checkpointer_val_loss = ModelCheckpoint(
         monitor="val_loss",
         dirpath=output_dir.joinpath("checkpoints"),
-        filename="document_separator-{epoch:02d}-{val_loss:.2f}",
+        filename="document_separator-{epoch:02d}-{val_loss:.4f}",
         save_top_k=3,
         mode="min",
     )
 
+    checkpointer_epoch = ModelCheckpoint(
+        monitor="global_epoch",
+        dirpath=output_dir.joinpath("checkpoints"),
+        filename="document_separator-{epoch:02d}-{global_epoch:.2f}",
+        save_last=True,
+        save_top_k=10,
+        mode="max",
+    )
+
     trainer = Trainer(
         max_epochs=args.epochs,
-        callbacks=[checkpointer],
+        callbacks=[checkpointer_val_loss, checkpointer_epoch],
         val_check_interval=0.25,
         logger=logger,
     )

@@ -9,7 +9,7 @@ from torchvision import datasets, transforms
 
 
 class ClassificationModel(pl.LightningModule):
-    def __init__(self, model, learning_rate=1e-5):
+    def __init__(self, model, learning_rate=1e-5, optimizer="Adam"):
         super(ClassificationModel, self).__init__()
         self.model = model
         self.learning_rate = learning_rate
@@ -18,6 +18,8 @@ class ClassificationModel(pl.LightningModule):
         self.test_accuracy = Accuracy(task="multiclass", num_classes=2)
 
         self.weight = torch.tensor([1, 3], dtype=torch.float)
+
+        self.optimizer = optimizer
 
     def forward(self, x):
         return self.model(x)
@@ -46,6 +48,7 @@ class ClassificationModel(pl.LightningModule):
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
         self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
         self.log("train_center_acc", center_acc, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
+        self.log("global_epoch", self.current_epoch, on_step=True, on_epoch=True, prog_bar=False, logger=False, batch_size=B)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -72,7 +75,7 @@ class ClassificationModel(pl.LightningModule):
 
         loss = F.cross_entropy(y_hat, y, weight=self.weight.to(y.device))
         acc = self.test_accuracy(y_hat, y)
-        center_acc = self.test_accuracy(self.get_middle_scan(y_hat, N), self.get_middle_scan(y, N))
+        center_acc = self.test_accuracy(self.get_middle_scan(y_hat), self.get_middle_scan(y))
 
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
         self.log("test_acc", acc, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
@@ -85,5 +88,10 @@ class ClassificationModel(pl.LightningModule):
         self.log_dict(norms)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        if self.optimizer == "Adam":
+            optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        elif self.optimizer == "SGD":
+            optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
+        else:
+            raise ValueError(f"Optimizer {self.optimizer} not supported")
         return optimizer
