@@ -187,7 +187,9 @@ class DocumentSeparationDataset(Dataset):
             prev_i, prev_j, prev_k = i, j, k
             for _ in range(steps_back):
                 prev_i, prev_j, prev_k = self.get_random_previous_scan(prev_i, prev_j, prev_k)
-            idcs.append((prev_i, prev_j, prev_k))
+                idcs.append((prev_i, prev_j, prev_k))
+            
+            idcs.reverse()
 
             # Current
             idcs.append((i, j, k))
@@ -196,7 +198,7 @@ class DocumentSeparationDataset(Dataset):
             next_i, next_j, next_k = i, j, k
             for _ in range(steps_forward):
                 next_i, next_j, next_k = self.get_random_next_scan(next_i, next_j, next_k)
-            idcs.append((next_i, next_j, next_k))
+                idcs.append((next_i, next_j, next_k))
         else:
             idcs = []
             i, j, k = self.idx_to_idcs[idx]
@@ -205,7 +207,9 @@ class DocumentSeparationDataset(Dataset):
             prev_i, prev_j, prev_k = i, j, k
             for _ in range(steps_back):
                 prev_i, prev_j, prev_k = self.get_previous_scan(prev_i, prev_j, prev_k)
-            idcs.append((prev_i, prev_j, prev_k))
+                idcs.append((prev_i, prev_j, prev_k))
+                
+            idcs.reverse()
 
             # Current
             idcs.append((i, j, k))
@@ -214,7 +218,7 @@ class DocumentSeparationDataset(Dataset):
             next_i, next_j, next_k = i, j, k
             for _ in range(steps_forward):
                 next_i, next_j, next_k = self.get_next_scan(next_i, next_j, next_k)
-            idcs.append((next_i, next_j, next_k))
+                idcs.append((next_i, next_j, next_k))
 
         targets = []
         _images = []
