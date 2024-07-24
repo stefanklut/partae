@@ -48,7 +48,6 @@ class ClassificationModel(pl.LightningModule):
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
         self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
         self.log("train_center_acc", center_acc, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
-        self.log("global_epoch", self.current_epoch, on_step=True, on_epoch=True, prog_bar=False, logger=False, batch_size=B)
         return loss
 
     def validation_step(self, batch, batch_idx):

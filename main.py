@@ -122,16 +122,24 @@ def main(args: argparse.Namespace):
         dirpath=output_dir.joinpath("checkpoints"),
         filename="document_separator-{epoch:02d}-{val_loss:.4f}",
         save_top_k=3,
+        save_last="link",
         mode="min",
     )
 
-    checkpointer_epoch = ModelCheckpoint(
-        monitor="global_epoch",
+    checkpointer_val_center_acc = ModelCheckpoint(
+        monitor="val_center_acc",
         dirpath=output_dir.joinpath("checkpoints"),
-        filename="document_separator-{epoch:02d}-{global_epoch:.2f}",
-        save_last=True,
-        save_top_k=10,
+        filename="document_separator-{epoch:02d}-{val_center_acc:.4f}",
+        save_top_k=3,
         mode="max",
+    )
+
+    checkpointer_epoch = ModelCheckpoint(
+        monitor="val_loss",
+        dirpath=output_dir.joinpath("checkpoints"),
+        filename="document_separator-{epoch:02d}",
+        every_n_epochs=1,
+        save_last="link",
     )
 
     trainer = Trainer(
