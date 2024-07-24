@@ -9,7 +9,7 @@ from torchvision import datasets, transforms
 
 
 class ClassificationModel(pl.LightningModule):
-    def __init__(self, model, learning_rate=1e-5, optimizer="Adam"):
+    def __init__(self, model, learning_rate=1e-5, optimizer="Adam", label_smoothing=0.1):
         super(ClassificationModel, self).__init__()
         self.model = model
         self.learning_rate = learning_rate
@@ -20,6 +20,7 @@ class ClassificationModel(pl.LightningModule):
         self.weight = torch.tensor([1, 3], dtype=torch.float)
 
         self.optimizer = optimizer
+        self.label_smoothing = label_smoothing
 
     def forward(self, x):
         return self.model(x)
@@ -57,7 +58,9 @@ class ClassificationModel(pl.LightningModule):
 
         y_hat = self.model(x)
 
-        loss = F.cross_entropy(y_hat.view(-1, 2), y.view(-1), weight=self.weight.to(y.device))
+        loss = F.cross_entropy(
+            y_hat.view(-1, 2), y.view(-1), weight=self.weight.to(y.device), label_smoothing=self.label_smoothing
+        )
         acc = self.val_accuracy(y_hat.view(-1, 2), y.view(-1))
         center_acc = self.val_accuracy(self.get_middle_scan(y_hat), self.get_middle_scan(y))
 

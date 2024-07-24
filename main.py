@@ -33,10 +33,16 @@ def get_arguments() -> argparse.Namespace:
     training_args = parser.add_argument_group("Training")
     training_args.add_argument("-e", "--epochs", help="Number of epochs", type=int, default=10)
     training_args.add_argument("-b", "--batch_size", help="Batch size", type=int, default=32)
-    training_args.add_argument("-n", "--number_of_images", help="Number of images", type=int, default=3)
     training_args.add_argument("--num_workers", help="Number of workers", type=int, default=16)
     training_args.add_argument("--learning_rate", help="Learning rate", type=float, default=1e-5)
     training_args.add_argument("--optimizer", help="Optimizer", type=str, default="Adam")
+    training_args.add_argument("--label_smoothing", help="Label smoothing", type=float, default=0.2)
+
+    dataset_args = parser.add_argument_group("Dataset")
+    dataset_args.add_argument("-n", "--number_of_images", help="Number of images", type=int, default=3)
+    dataset_args.add_argument("--randomize_document_order", help="Randomize document order", action="store_true")
+    dataset_args.add_argument("--sample_same_inventory", help="Sample same inventory", action="store_true")
+    dataset_args.add_argument("--wrap_round", help="Wrap round", action="store_true")
 
     model_args = parser.add_argument_group("Model")
     model_args.add_argument("--turn_off_image", help="Turn off image encoder", action="store_true")
@@ -90,6 +96,9 @@ def main(args: argparse.Namespace):
         batch_size=args.batch_size,
         number_of_images=args.number_of_images,
         num_workers=args.num_workers,
+        randomize_document_order=args.randomize_document_order,
+        sample_same_inventory=args.sample_same_inventory,
+        wrap_round=args.wrap_round,
     )
     model = ClassificationModel(
         model=DocumentSeparator(
@@ -101,6 +110,8 @@ def main(args: argparse.Namespace):
             dropout=args.dropout,
         ),
         learning_rate=args.learning_rate,
+        optimizer=args.optimizer,
+        label_smoothing=args.label_smoothing,
     )
 
     logger = TensorBoardLogger("lightning_logs", name="document_separator")
@@ -144,7 +155,7 @@ def main(args: argparse.Namespace):
 
     trainer = Trainer(
         max_epochs=args.epochs,
-        callbacks=[checkpointer_val_loss, checkpointer_epoch],
+        callbacks=[checkpointer_val_loss, checkpointer_epoch, checkpointer_val_center_acc],
         val_check_interval=0.25,
         logger=logger,
     )

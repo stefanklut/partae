@@ -47,7 +47,7 @@ class Predictor:
             raise ValueError("No checkpoint provided")
 
         self.model = ClassificationModel.load_from_checkpoint(checkpoint, model=model)
-        self.model = model
+        self.model.eval()
 
     def __call__(self, data: dict) -> torch.Tensor:
         result_logits = self.model(data)

@@ -54,6 +54,9 @@ class DocumentSeparationModule(pl.LightningDataModule):
         batch_size: int = 8,
         number_of_images: int = 3,
         num_workers: int = 8,
+        randomize_document_order: bool = True,
+        sample_same_inventory: bool = False,
+        wrap_round: bool = False,
     ):
         super().__init__()
         self.training_paths = training_paths
@@ -69,6 +72,9 @@ class DocumentSeparationModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.number_of_images = number_of_images
         self.num_workers = num_workers
+        self.randomize_document_order = randomize_document_order
+        self.sample_same_inventory = sample_same_inventory
+        self.wrap_round = wrap_round
 
     def prepare_data(self):
         # download, split, etc...
@@ -83,6 +89,9 @@ class DocumentSeparationModule(pl.LightningDataModule):
                 training_paths,
                 number_of_images=self.number_of_images,
                 transform=self.transform,
+                randomize_document_order=self.randomize_document_order,
+                sample_same_inventory=self.sample_same_inventory,
+                wrap_round=self.wrap_round,
             )
             self.val_dataset = DocumentSeparationDataset(
                 val_paths,
