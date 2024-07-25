@@ -48,6 +48,8 @@ def get_arguments() -> argparse.Namespace:
     model_args.add_argument("--turn_off_image", help="Turn off image encoder", action="store_true")
     model_args.add_argument("--turn_off_text", help="Turn off text encoder", action="store_true")
     model_args.add_argument("--turn_off_shapes", help="Turn off shapes encoder", action="store_true")
+    model_args.add_argument("--freeze_imagenet", help="Freeze ImageNet", action="store_true")
+    model_args.add_argument("--freeze_roberta", help="Freeze RoBERTa", action="store_true")
     model_args.add_argument("--dropout", help="Dropout", type=float, default=0.5)
 
     args = parser.parse_args()
@@ -112,9 +114,12 @@ def main(args: argparse.Namespace):
         learning_rate=args.learning_rate,
         optimizer=args.optimizer,
         label_smoothing=args.label_smoothing,
+        freeze_imagenet=args.freeze_imagenet,
+        freeze_roberta=args.freeze_roberta,
     )
 
     logger = TensorBoardLogger("lightning_logs", name="document_separator")
+    logger = TensorBoardLogger("lightning_logs", name="pretraining")
     output_dir = Path(logger.log_dir)
 
     # Save git hash to output directory

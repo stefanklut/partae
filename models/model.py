@@ -49,10 +49,10 @@ class ImageEncoder(nn.Module):
         imagenet = torchvision.models.resnet34(weights=ResNet34_Weights.DEFAULT)
         self.imagenet = nn.Sequential(*list(imagenet.children())[:-2])
         self.flatten = nn.Flatten(1, -1)
+        self.conv = nn.Conv2d(512, 256, kernel_size=3, padding=1)
         self.fc = nn.Sequential(
-            LazyLinearBlock(2048),
-            LinearBlock(2048, 1024),
-            nn.Linear(1024, 512),
+            LazyLinearBlock(512),
+            nn.Linear(512, 16),
         )
 
     @property
@@ -63,10 +63,10 @@ class ImageEncoder(nn.Module):
     def encode_image(self, image: torch.Tensor):
         image = image.to(self.device)  # (B, C, H, W)
         encoded_image = F.interpolate(image, self.resize_size)  # (B, C, resize_size[0], resize_size[1])
-        with torch.no_grad():
-            encoded_image = self.imagenet(encoded_image)  # (B, 2048, ...)
-        encoded_image = self.flatten(encoded_image)  # (B, 2048 * ...)
-        encoded_image = self.fc(encoded_image)  # (B, 512)
+        encoded_image = self.imagenet(encoded_image)  # (B, 2048, ...)
+        encoded_image = self.conv(encoded_image)  # (B, 1024, ...)
+        encoded_image = self.flatten(encoded_image)  # (B, 1024 * ...)
+        encoded_image = self.fc(encoded_image)  # (B, 16)
         return encoded_image
 
     def forward(self, x: torch.Tensor):
@@ -79,11 +79,11 @@ class ImageEncoder(nn.Module):
             batched_x: torch.Tensor = torch.concat(chunked_x, dim=0).squeeze(dim=1)  # (B * N, C, H, W)
 
             # Encode each image
-            batched_encoded_image = self.encode_image(batched_x)  # (B * N, 512)
+            batched_encoded_image = self.encode_image(batched_x)  # (B * N, 16)
 
             # Chunk the encoded images back into the original batch size
-            chunked_encoded_images: tuple[torch.Tensor, ...] = batched_encoded_image.chunk(N, dim=0)  # N x (B, 512)
-            encoded_images = torch.stack(chunked_encoded_images, dim=1)  # (B, N, 512)
+            chunked_encoded_images: tuple[torch.Tensor, ...] = batched_encoded_image.chunk(N, dim=0)  # N x (B, 16)
+            encoded_images = torch.stack(chunked_encoded_images, dim=1)  # (B, N, 16)
 
         else:
             # Loop through the images and encode them
@@ -92,11 +92,11 @@ class ImageEncoder(nn.Module):
                 image = x[:, i]
 
                 # Encode the individual images per batch
-                encoded_image = self.encode_image(image)  # (B, 512)
+                encoded_image = self.encode_image(image)  # (B, 16)
                 encoded_images_list.append(encoded_image)
 
             # Recombine the encoded images
-            encoded_images = torch.stack(encoded_images_list, dim=1)  # (B, N, 512)
+            encoded_images = torch.stack(encoded_images_list, dim=1)  # (B, N, 16)
 
         # if torch.isnan(encoded_images).any():
         #     raise ValueError("NaN values in the encoded images")
@@ -115,7 +115,7 @@ class TextEncoder(nn.Module):
 
         self.fc = nn.Sequential(
             LazyLinearBlock(512),
-            nn.Linear(512, 512),
+            nn.Linear(512, 16),
         )
 
     @property
@@ -129,10 +129,9 @@ class TextEncoder(nn.Module):
         encoded_text = {key: tensor.to(self.device) for key, tensor in encoded_text.items()}
 
         # Encode the text
-        with torch.no_grad():
-            encoded_text = self.roberta(**encoded_text).last_hidden_state  # (B, S, 768)
+        encoded_text = self.roberta(**encoded_text).last_hidden_state  # (B, S, 768)
         encoded_text = encoded_text[:, 0]  # (B, 768)
-        encoded_text = self.fc(encoded_text)  # (B, 512)
+        encoded_text = self.fc(encoded_text)  # (B, 16)
 
         return encoded_text
 
@@ -183,17 +182,16 @@ class DocumentSeparator(nn.Module):
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
         self.lstm = nn.LSTM(
-            input_size=1027,
-            hidden_size=512,
+            input_size=35,
+            hidden_size=16,
             num_layers=1,
             batch_first=True,
             bidirectional=True,
             dropout=dropout,
         )
         self.fc = nn.Sequential(
-            LazyLinearBlock(1024, dropout=dropout),
-            LinearBlock(1024, 512, dropout=dropout),
-            nn.Linear(512, output_size),
+            LazyLinearBlock(16, dropout=dropout),
+            nn.Linear(16, output_size),
         )
         self.dropout = nn.Dropout(dropout)
 
@@ -216,13 +214,13 @@ class DocumentSeparator(nn.Module):
 
         if self.turn_off_image:
             B, N, C, H, W = images.size()
-            images = torch.zeros((B, N, 512), device=self.device)
+            images = torch.zeros((B, N, 16), device=self.device)
         else:
             images = self.image_encoder(images)
 
         if self.turn_off_text:
             B, N = len(texts), len(texts[0])
-            texts = torch.zeros((B, N, 512), device=self.device)
+            texts = torch.zeros((B, N, 16), device=self.device)
         else:
             texts = self.text_encoder(texts)
 
@@ -243,9 +241,9 @@ class DocumentSeparator(nn.Module):
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
         # x = torch.cat([images, texts], dim=2)  # (B, N, 1024)
 
-        x = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
+        x = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 35)
         x = self.dropout(x)
-        x, _ = self.lstm(x)  # (B, N, 1024)
+        x, _ = self.lstm(x)  # (B, N, 32)
         # x = torch.concat([x, inverted_shapes.to(self.device), ratio_shapes.to(self.device)], dim=2)
         # x = torch.concat([x, inverted_shapes.to(self.device)], dim=2)
         x = self.fc(x)
