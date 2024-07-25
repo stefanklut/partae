@@ -36,7 +36,7 @@ def get_arguments() -> argparse.Namespace:
     training_args.add_argument("--num_workers", help="Number of workers", type=int, default=16)
     training_args.add_argument("--learning_rate", help="Learning rate", type=float, default=1e-5)
     training_args.add_argument("--optimizer", help="Optimizer", type=str, default="Adam")
-    training_args.add_argument("--label_smoothing", help="Label smoothing", type=float, default=0.2)
+    training_args.add_argument("--label_smoothing", help="Label smoothing", type=float, default=0.0)
 
     dataset_args = parser.add_argument_group("Dataset")
     dataset_args.add_argument("-n", "--number_of_images", help="Number of images", type=int, default=3)
@@ -48,7 +48,7 @@ def get_arguments() -> argparse.Namespace:
     model_args.add_argument("--turn_off_image", help="Turn off image encoder", action="store_true")
     model_args.add_argument("--turn_off_text", help="Turn off text encoder", action="store_true")
     model_args.add_argument("--turn_off_shapes", help="Turn off shapes encoder", action="store_true")
-    model_args.add_argument("--dropout", help="Dropout", type=float, default=0.0)
+    model_args.add_argument("--dropout", help="Dropout", type=float, default=0.5)
 
     args = parser.parse_args()
     return args
@@ -146,10 +146,10 @@ def main(args: argparse.Namespace):
     )
 
     checkpointer_epoch = ModelCheckpoint(
-        monitor="val_loss",
         dirpath=output_dir.joinpath("checkpoints"),
         filename="document_separator-{epoch:02d}",
         every_n_epochs=1,
+        save_top_k=-1,
         save_last="link",
     )
 

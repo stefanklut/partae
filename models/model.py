@@ -174,7 +174,7 @@ class DocumentSeparator(nn.Module):
         image_encoder,
         text_encoder,
         output_size=2,
-        dropout=0.0,
+        dropout=0.5,
         turn_off_image=False,
         turn_off_text=False,
         turn_off_shapes=False,
@@ -182,7 +182,14 @@ class DocumentSeparator(nn.Module):
         super(DocumentSeparator, self).__init__()
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
-        self.lstm = nn.LSTM(input_size=1027, hidden_size=512, num_layers=1, batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(
+            input_size=1027,
+            hidden_size=512,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout,
+        )
         self.fc = nn.Sequential(
             LazyLinearBlock(1024, dropout=dropout),
             LinearBlock(1024, 512, dropout=dropout),

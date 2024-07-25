@@ -147,6 +147,7 @@ class DocumentSeparationDataset(Dataset):
     @staticmethod
     def random_choice_except(high: int, excluding: int, size=None, replace=True):
         assert isinstance(high, int), "high must be an integer"
+        assert isinstance(excluding, int), "excluding must be an integer"
         assert excluding < high, "excluding value must be less than high"
         # generate random values in the range [0, high-1)
         choices = np.random.choice(high - 1, size, replace=replace)
@@ -159,7 +160,7 @@ class DocumentSeparationDataset(Dataset):
                 random_i = self.random_choice_except(len(self.image_paths), i)
             else:
                 random_i = i
-            random_j = self.random_choice_except(len(self.image_paths[random_i]), j)
+            random_j = np.random.choice(len(self.image_paths[random_i]))
             return random_i, random_j, 0
         else:
             return i, j, k + 1
@@ -170,7 +171,7 @@ class DocumentSeparationDataset(Dataset):
                 random_i = self.random_choice_except(len(self.image_paths), i)
             else:
                 random_i = i
-            random_j = self.random_choice_except(len(self.image_paths[random_i]), j)
+            random_j = np.random.choice(len(self.image_paths[random_i]))
             return random_i, random_j, len(self.image_paths[random_i][random_j]) - 1
         else:
             return i, j, k - 1
@@ -188,7 +189,7 @@ class DocumentSeparationDataset(Dataset):
             for _ in range(steps_back):
                 prev_i, prev_j, prev_k = self.get_random_previous_scan(prev_i, prev_j, prev_k)
                 idcs.append((prev_i, prev_j, prev_k))
-            
+
             idcs.reverse()
 
             # Current
@@ -208,7 +209,7 @@ class DocumentSeparationDataset(Dataset):
             for _ in range(steps_back):
                 prev_i, prev_j, prev_k = self.get_previous_scan(prev_i, prev_j, prev_k)
                 idcs.append((prev_i, prev_j, prev_k))
-                
+
             idcs.reverse()
 
             # Current
