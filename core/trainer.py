@@ -53,7 +53,9 @@ class ClassificationModel(pl.LightningModule):
 
         y_hat = self.model(x)
 
-        loss = F.cross_entropy(y_hat.view(-1, 2), y.view(-1), weight=self.weight.to(y.device))
+        loss = F.cross_entropy(
+            y_hat.view(-1, 2), y.view(-1), weight=self.weight.to(y.device), label_smoothing=self.label_smoothing
+        )
         acc = self.train_accuracy(y_hat.view(-1, 2), y.view(-1))
         center_acc = self.train_accuracy(self.get_middle_scan(y_hat), self.get_middle_scan(y))
 
@@ -69,9 +71,7 @@ class ClassificationModel(pl.LightningModule):
 
         y_hat = self.model(x)
 
-        loss = F.cross_entropy(
-            y_hat.view(-1, 2), y.view(-1), weight=self.weight.to(y.device), label_smoothing=self.label_smoothing
-        )
+        loss = F.cross_entropy(y_hat.view(-1, 2), y.view(-1), weight=self.weight.to(y.device))
         acc = self.val_accuracy(y_hat.view(-1, 2), y.view(-1))
         center_acc = self.val_accuracy(self.get_middle_scan(y_hat), self.get_middle_scan(y))
 
