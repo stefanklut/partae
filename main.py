@@ -29,6 +29,7 @@ def get_arguments() -> argparse.Namespace:
     io_args.add_argument("-x", "--xlsx", help="XLSX file with labels", type=str, default=None)
 
     io_args.add_argument("-c", "--checkpoint", help="Checkpoint file", type=str, default=None)
+    io_args.add_argument("-o", "--output", help="Output folder", type=str, default="document_separator")
 
     training_args = parser.add_argument_group("Training")
     training_args.add_argument("-e", "--epochs", help="Number of epochs", type=int, default=10)
@@ -118,8 +119,7 @@ def main(args: argparse.Namespace):
         freeze_roberta=args.freeze_roberta,
     )
 
-    logger = TensorBoardLogger("lightning_logs", name="document_separator")
-    logger = TensorBoardLogger("lightning_logs", name="pretraining")
+    logger = TensorBoardLogger("lightning_logs", name=args.output)
     output_dir = Path(logger.log_dir)
 
     # Save git hash to output directory
