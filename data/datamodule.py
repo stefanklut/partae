@@ -59,13 +59,12 @@ class DocumentSeparationModule(pl.LightningDataModule):
         wrap_round: bool = False,
     ):
         super().__init__()
-        self.training_paths = training_paths
 
         if val_paths is None:
             # split training paths into training and validation paths
-            self.training_paths, self.val_paths = split_training_paths(self.training_paths, split_ratio=0.9, seed=101)
+            training_paths, val_paths = split_training_paths(training_paths, split_ratio=0.9, seed=101)
         else:
-            self.val_paths = val_paths
+            val_paths = natsorted(val_paths)
 
         self.xlsx_file = xlsx_file
         self.transform = transform
@@ -76,17 +75,17 @@ class DocumentSeparationModule(pl.LightningDataModule):
         self.sample_same_inventory = sample_same_inventory
         self.wrap_round = wrap_round
 
+        self.training_paths = link_with_paths(self.xlsx_file, training_paths)
+        self.val_paths = link_with_paths(self.xlsx_file, val_paths)
+
     def prepare_data(self):
         # download, split, etc...
         pass
 
     def setup(self, stage=None):
-        training_paths = link_with_paths(self.xlsx_file, self.training_paths)
-        val_paths = link_with_paths(self.xlsx_file, self.val_paths)
-
         if stage == "fit" or stage is None:
             self.train_dataset = DocumentSeparationDataset(
-                training_paths,
+                self.training_paths,
                 number_of_images=self.number_of_images,
                 transform=self.transform,
                 randomize_document_order=self.randomize_document_order,
@@ -94,7 +93,7 @@ class DocumentSeparationModule(pl.LightningDataModule):
                 wrap_round=self.wrap_round,
             )
             self.val_dataset = DocumentSeparationDataset(
-                val_paths,
+                self.val_paths,
                 number_of_images=self.number_of_images,
                 transform=self.transform,
             )

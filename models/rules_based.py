@@ -41,9 +41,20 @@ class RulesBased:
             return True
         return False
 
+    def get_median_color_match(self, image1, image2, margin):
+        median1 = np.median(image1, axis=(1, 2)) / 255
+        median2 = np.median(image2, axis=(1, 2)) / 255
+        color_median_diff = (
+            np.abs(median1[0] - median2[0]) + np.abs(median1[1] - median2[1]) + np.abs(median1[2] - median2[2])
+        ) / 3
+        if color_median_diff < margin:
+            return True
+        return False
+
     def __call__(self, x):
         shapes = x["shapes"]
         image_paths = x["image_paths"]
+        # images = x["images"]
 
         B = shapes.shape[0]
         N = shapes.shape[1]
@@ -59,7 +70,7 @@ class RulesBased:
                 inventory_number_file = check.group(2)
                 if inventory_number_dir != inventory_number_file:
                     raise ValueError(
-                        f"Inventory number in dir {inventory_number_dir} does not match with inventory number in file {inventory_number_file}. Path: {path}"
+                        f"Inventory number in dir {inventory_number_dir} does not match with inventory number in file {inventory_number_file}. Path: {center_path}"
                     )
                 page_number = int(check.group(3))
                 if page_number == 1:
@@ -74,6 +85,9 @@ class RulesBased:
 
             center_shape = np.asarray(shapes[i, center_index])[::-1]
             prev_shape = np.asarray(shapes[i, center_index - 1])[::-1]
+            # center_image = (images[i, center_index] * 255).numpy().astype(np.uint8)
+            # prev_image = (images[i, center_index - 1] * 255).numpy().astype(np.uint8)
+
             if self.get_size_match(prev_shape, center_shape, 0.1):
                 predictions[i, 0] = 1
             else:

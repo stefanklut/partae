@@ -131,4 +131,9 @@ if __name__ == "__main__":
         ]
     ]
     output = text_features_array(x)
-    print(torch.unique(output))
+    print([parameter.grad for parameter in text_features_array.text_encoder.roberta.parameters()])
+    loss = output.sum()
+    loss.backward()
+
+    print([parameter.grad for parameter in text_features_array.text_encoder.roberta.parameters()])
+    # print(torch.unique(output))

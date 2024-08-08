@@ -14,7 +14,7 @@ from data.augmentations import PadToMaxSize, SmartCompose
 from data.convert_xlsx import link_with_paths
 from data.dataloader import collate_fn
 from data.dataset import DocumentSeparationDataset
-from models.model import DocumentSeparator, ImageEncoder, TextEncoder
+from models.model2 import DocumentSeparator, ImageEncoder, TextEncoder
 from models.rules_based import RulesBased
 from utils.input_utils import get_file_paths, supported_image_formats
 

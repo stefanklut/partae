@@ -12,7 +12,7 @@ from torchvision.transforms import Resize, ToTensor
 from core.trainer import ClassificationModel
 from data.augmentations import PadToMaxSize, SmartCompose
 from data.datamodule import DocumentSeparationModule
-from models.model import DocumentSeparator, ImageEncoder, TextEncoder
+from models.model2 import DocumentSeparator, ImageEncoder, TextEncoder
 from utils.input_utils import get_file_paths, supported_image_formats
 
 torch.set_float32_matmul_precision("high")
@@ -132,6 +132,42 @@ def main(args: argparse.Namespace):
     with output_dir.joinpath("arguments").open("w") as file:
         for key, value in vars(args).items():
             file.write(f"{key}: {value}\n")
+
+    # Save what data is used
+    output_dir.joinpath("data").mkdir(exist_ok=True)
+    num_inventories_train = 0
+    num_documents_train = 0
+    num_scans_train = 0
+    with output_dir.joinpath("data", "training_paths.txt").open("w") as file:
+        for inventory in data_module.training_paths:
+            num_inventories_train += 1
+            for document in inventory:
+                num_documents_train += 1
+                for scan in document:
+                    num_scans_train += 1
+                    file.write(f"{scan}\n")
+
+    print("Training data:")
+    print(f"Number of inventories: {num_inventories_train}")
+    print(f"Number of documents: {num_documents_train}")
+    print(f"Number of scans: {num_scans_train}")
+
+    num_inventories_val = 0
+    num_documents_val = 0
+    num_scans_val = 0
+    with output_dir.joinpath("data", "val_paths.txt").open("w") as file:
+        for inventory in data_module.val_paths:
+            num_inventories_val += 1
+            for document in inventory:
+                num_documents_val += 1
+                for scan in document:
+                    num_scans_val += 1
+                    file.write(f"{scan}\n")
+
+    print("Validation data:")
+    print(f"Number of inventories: {num_inventories_val}")
+    print(f"Number of documents: {num_documents_val}")
+    print(f"Number of scans: {num_scans_val}")
 
     checkpointer_val_loss = ModelCheckpoint(
         monitor="val_loss",
