@@ -182,7 +182,7 @@ class DocumentSeparator(nn.Module):
         super(DocumentSeparator, self).__init__()
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
-        self.lstm = nn.LSTM(
+        self.lstm_combined = nn.LSTM(
             input_size=35,
             hidden_size=16,
             num_layers=1,
@@ -190,13 +190,57 @@ class DocumentSeparator(nn.Module):
             bidirectional=True,
             dropout=dropout,
         )
-        self.fc = nn.Sequential(
+
+        self.lstm_text = nn.LSTM(
+            input_size=16,
+            hidden_size=16,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout,
+        )
+
+        self.lstm_image = nn.LSTM(
+            input_size=16,
+            hidden_size=16,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout,
+        )
+
+        self.lstm_shapes = nn.LSTM(
+            input_size=3,
+            hidden_size=2,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout,
+        )
+
+        self.fc_combined = nn.Sequential(
             LazyLinearBlock(16, dropout=dropout),
             nn.Linear(16, output_size),
         )
+
+        self.fc_text = nn.Sequential(
+            LazyLinearBlock(16, dropout=dropout),
+            nn.Linear(16, output_size),
+        )
+
+        self.fc_image = nn.Sequential(
+            LazyLinearBlock(16, dropout=dropout),
+            nn.Linear(16, output_size),
+        )
+
+        self.fc_shapes = nn.Sequential(
+            LazyLinearBlock(4, dropout=dropout),
+            nn.Linear(4, output_size),
+        )
+
         self.dropout = nn.Dropout(dropout)
 
-        self.accuracy = Accuracy("multiclass", num_classes=output_size)
+        self.accuracy = Accuracy(task="multiclass", num_classes=output_size)
 
         self.turn_off_image = turn_off_image
         self.turn_off_text = turn_off_text
@@ -244,22 +288,57 @@ class DocumentSeparator(nn.Module):
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
         # x = torch.cat([images, texts], dim=2)  # (B, N, 1024)
 
-        output = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 35)
-        output = self.dropout(output)
-        output, _ = self.lstm(output)  # (B, N, 32)
-        output = self.fc(output)
-        output_center = output[:, output.shape[1] // 2]
+        output_combined = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 35)
+
+        output_combined = self.dropout(output_combined)
+        output_combined, _ = self.lstm_combined(output_combined)
+        output_combined = output_combined[:, output_combined.shape[1] // 2]
+        output_combined = self.fc_combined(output_combined)
+
+        output_text = self.dropout(texts)
+        output_text, _ = self.lstm_text(output_text)
+        output_text = output_text[:, output_text.shape[1] // 2]
+        output_text = self.fc_text(output_text)
+
+        output_image = self.dropout(images)
+        output_image, _ = self.lstm_image(output_image)
+        output_image = output_image[:, output_image.shape[1] // 2]
+        output_image = self.fc_image(output_image)
+
+        output_shapes = torch.cat([inverted_shapes, ratio_shapes], dim=2)
+        output_shapes = self.dropout(output_shapes)
+        output_shapes, _ = self.lstm_shapes(output_shapes)
+        output_shapes = output_shapes[:, output_shapes.shape[1] // 2]
+        output_shapes = self.fc_shapes(output_shapes)
 
         if "targets" in x:
             targets = x["targets"]
-            loss = F.cross_entropy(output.view(-1, 2), targets.view(-1))
-            losses = {"loss": loss}
             targets_center = targets[:, targets.shape[1] // 2]
-            acc = self.accuracy(output_center, targets_center)
-            metrics = {"acc": acc}
-            return output_center, losses, metrics
+            loss_combined = F.cross_entropy(output_combined, targets_center)
+            loss_text = F.cross_entropy(output_text, targets_center)
+            loss_image = F.cross_entropy(output_image, targets_center)
+            loss_shapes = F.cross_entropy(output_shapes, targets_center)
 
-        return output_center, None, None
+            losses = {
+                "loss_combined": loss_combined * 0.2,
+                "loss_text": loss_text * 0.3,
+                "loss_image": loss_image * 0.3,
+                "loss_shapes": loss_shapes * 0.2,
+            }
+
+            acc_combined = self.accuracy(output_combined, targets_center)
+            acc_text = self.accuracy(output_text, targets_center)
+            acc_image = self.accuracy(output_image, targets_center)
+            acc_shapes = self.accuracy(output_shapes, targets_center)
+
+            metrics = {
+                "acc": acc_combined,
+                "acc_text": acc_text,
+                "acc_image": acc_image,
+                "acc_shapes": acc_shapes,
+            }
+            return output_combined, losses, metrics
+        return output_combined, None, None
 
 
 if __name__ == "__main__":

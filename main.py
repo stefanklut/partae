@@ -12,7 +12,7 @@ from torchvision.transforms import Resize, ToTensor
 from core.trainer import ClassificationModel
 from data.augmentations import PadToMaxSize, SmartCompose
 from data.datamodule import DocumentSeparationModule
-from models.model2 import DocumentSeparator, ImageEncoder, TextEncoder
+from models.model4 import DocumentSeparator, ImageEncoder, TextEncoder
 from utils.input_utils import get_file_paths, supported_image_formats
 
 torch.set_float32_matmul_precision("high")
@@ -179,7 +179,7 @@ def main(args: argparse.Namespace):
     )
 
     checkpointer_val_center_acc = ModelCheckpoint(
-        monitor="val_center_acc",
+        monitor="val_acc",
         dirpath=output_dir.joinpath("checkpoints"),
         filename="document_separator-{epoch:02d}-{val_center_acc:.4f}",
         save_top_k=3,

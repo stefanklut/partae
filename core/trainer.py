@@ -22,11 +22,6 @@ class ClassificationModel(pl.LightningModule):
         super(ClassificationModel, self).__init__()
         self.model = model
         self.learning_rate = learning_rate
-        self.train_accuracy = Accuracy(task="multiclass", num_classes=2)
-        self.val_accuracy = Accuracy(task="multiclass", num_classes=2)
-        self.test_accuracy = Accuracy(task="multiclass", num_classes=2)
-
-        self.weight = torch.tensor([1, 3], dtype=torch.float)
 
         self.optimizer = optimizer
         self.label_smoothing = label_smoothing
@@ -36,69 +31,41 @@ class ClassificationModel(pl.LightningModule):
     def forward(self, x):
         return self.model(x)
 
-    def split_input(self, batch):
-        y = batch["targets"]
-        y = y.type(torch.int64)
-        del batch["targets"]
-        x = batch
-        return x, y
-
     def get_middle_scan(self, y):
         return y[:, y.shape[1] // 2]
 
     def training_step(self, batch, batch_idx):
-        x, y = self.split_input(batch)
-        B = y.shape[0]
-        N = y.shape[1]
+        B = batch["images"].shape[0]
 
-        y_hat = self.model(x)
+        _, losses, metrics = self.model(batch)
 
-        loss = F.cross_entropy(
-            y_hat.view(-1, 2), y.view(-1), weight=self.weight.to(y.device), label_smoothing=self.label_smoothing
-        )
-        acc = self.train_accuracy(y_hat.view(-1, 2), y.view(-1))
-        center_acc = self.train_accuracy(self.get_middle_scan(y_hat), self.get_middle_scan(y))
+        for loss in losses:
+            self.log(f"train_{loss}", losses[loss], on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
+        for metric in metrics:
+            self.log(f"train_{metric}", metrics[metric], on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
 
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
-        self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
-        self.log("train_center_acc", center_acc, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
-        return loss
+        total_loss = sum(losses.values())
+        return total_loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = self.split_input(batch)
-        B = y.shape[0]
-        N = y.shape[1]
+        B = batch["images"].shape[0]
 
-        y_hat = self.model(x)
+        _, losses, metrics = self.model(batch)
 
-        loss = F.cross_entropy(y_hat.view(-1, 2), y.view(-1), weight=self.weight.to(y.device))
-        acc = self.val_accuracy(y_hat.view(-1, 2), y.view(-1))
-        center_acc = self.val_accuracy(self.get_middle_scan(y_hat), self.get_middle_scan(y))
-
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
-        self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
-        self.log("val_center_acc", center_acc, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
+        for loss in losses:
+            self.log(f"val_{loss}", losses[loss], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
+        for metric in metrics:
+            self.log(f"val_{metric}", metrics[metric], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
 
     def test_step(self, batch, batch_idx):
-        x, y = self.split_input(batch)
-        B = y.shape[0]
-        N = y.shape[1]
+        B = batch["images"].shape[0]
 
-        y_hat = self.model(x)
+        _, losses, metrics = self.model(batch)
 
-        loss = F.cross_entropy(y_hat, y, weight=self.weight.to(y.device))
-        acc = self.test_accuracy(y_hat, y)
-        center_acc = self.test_accuracy(self.get_middle_scan(y_hat), self.get_middle_scan(y))
-
-        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
-        self.log("test_acc", acc, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
-        self.log("test_center_acc", center_acc, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
-
-    def on_before_optimizer_step(self, optimizer):
-        # Compute the 2-norm for each layer
-        # If using mixed precision, the gradients are already unscaled here
-        norms = grad_norm(self.model, 2)
-        self.log_dict(norms)
+        for loss in losses:
+            self.log(f"test_{loss}", losses[loss], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
+        for metric in metrics:
+            self.log(f"test_{metric}", metrics[metric], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
 
     def configure_optimizers(self):
         param_groups = []

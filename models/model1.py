@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
+from torchmetrics import Accuracy
 from torchvision.models import (
     ResNet34_Weights,
     ResNet50_Weights,
@@ -200,6 +201,7 @@ class DocumentSeparator(nn.Module):
         self.turn_off_image = turn_off_image
         self.turn_off_text = turn_off_text
         self.turn_off_shapes = turn_off_shapes
+        self.accuracy = Accuracy(task="multiclass", num_classes=output_size)
 
     @property
     @lru_cache
@@ -241,18 +243,22 @@ class DocumentSeparator(nn.Module):
             ratio_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), ratio_shapes)
 
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
-        # x = torch.cat([images, texts], dim=2)  # (B, N, 1024)
+        output = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
+        output = self.dropout(output)
+        output, _ = self.lstm(output)  # (B, N, 1024)
+        output = self.fc(output)
+        output_center = output[:, output.shape[1] // 2]
 
-        x = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
-        x = self.dropout(x)
-        x, _ = self.lstm(x)  # (B, N, 1024)
-        # x = torch.concat([x, inverted_shapes.to(self.device), ratio_shapes.to(self.device)], dim=2)
-        # x = torch.concat([x, inverted_shapes.to(self.device)], dim=2)
-        x = self.fc(x)
+        if "targets" in x:
+            targets = x["targets"]
+            loss = F.cross_entropy(output.view(-1, 2), targets.view(-1))
+            losses = {"loss": loss}
+            targets_center = targets[:, targets.shape[1] // 2]
+            acc = self.accuracy(output_center, targets_center)
+            metrics = {"acc": acc}
+            return output_center, losses, metrics
 
-        # if torch.isnan(x).any():
-        #     raise ValueError("NaN values in the output")
-        return x
+        return output_center, None, None
 
 
 if __name__ == "__main__":

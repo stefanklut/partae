@@ -156,7 +156,7 @@ class SavePredictor(Predictor):
             result = self(data)
 
             result = result.cpu().numpy()
-            middle_scan = self.get_middle_scan(result)
+            middle_scan = result
             middle_path = self.get_middle_path(data["image_paths"])
             # Save the result
             name = middle_path.stem

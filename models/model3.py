@@ -196,7 +196,7 @@ class DocumentSeparator(nn.Module):
         )
         self.dropout = nn.Dropout(dropout)
 
-        self.accuracy = Accuracy("multiclass", num_classes=output_size)
+        self.accuracy = Accuracy(task="multiclass", num_classes=output_size)
 
         self.turn_off_image = turn_off_image
         self.turn_off_text = turn_off_text
@@ -247,19 +247,18 @@ class DocumentSeparator(nn.Module):
         output = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 35)
         output = self.dropout(output)
         output, _ = self.lstm(output)  # (B, N, 32)
-        output = self.fc(output)
         output_center = output[:, output.shape[1] // 2]
+        output_center = self.fc(output_center)
 
         if "targets" in x:
             targets = x["targets"]
-            loss = F.cross_entropy(output.view(-1, 2), targets.view(-1))
-            losses = {"loss": loss}
             targets_center = targets[:, targets.shape[1] // 2]
+            loss = F.cross_entropy(output_center, targets_center)
+            losses = {"loss": loss}
             acc = self.accuracy(output_center, targets_center)
             metrics = {"acc": acc}
             return output_center, losses, metrics
-
-        return output_center, None, None
+        return output_center
 
 
 if __name__ == "__main__":
