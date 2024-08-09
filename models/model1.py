@@ -64,8 +64,7 @@ class ImageEncoder(nn.Module):
     def encode_image(self, image: torch.Tensor):
         image = image.to(self.device)  # (B, C, H, W)
         encoded_image = F.interpolate(image, self.resize_size)  # (B, C, resize_size[0], resize_size[1])
-        with torch.no_grad():
-            encoded_image = self.imagenet(encoded_image)  # (B, 2048, ...)
+        encoded_image = self.imagenet(encoded_image)  # (B, 2048, ...)
         encoded_image = self.flatten(encoded_image)  # (B, 2048 * ...)
         encoded_image = self.fc(encoded_image)  # (B, 512)
         return encoded_image
@@ -130,8 +129,8 @@ class TextEncoder(nn.Module):
         encoded_text = {key: tensor.to(self.device) for key, tensor in encoded_text.items()}
 
         # Encode the text
-        with torch.no_grad():
-            encoded_text = self.roberta(**encoded_text).last_hidden_state  # (B, S, 768)
+
+        encoded_text = self.roberta(**encoded_text).last_hidden_state  # (B, S, 768)
         encoded_text = encoded_text[:, 0]  # (B, 768)
         encoded_text = self.fc(encoded_text)  # (B, 512)
 
