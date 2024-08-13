@@ -74,8 +74,13 @@ class DocumentSeparationDataset(Dataset):
 
     @functools.lru_cache(maxsize=16)
     def get_image(self, i, j, k):
-        image_path = self.image_paths[i][j][k]
-        image = Image.open(image_path)
+        image_path = self.image_paths[i][j][k].resolve()
+        try:
+            image = Image.open(image_path)
+            image.load()
+        except OSError as e:
+            print(f"Could not open image {image_path}")
+            return None
         return image
 
     @functools.lru_cache(maxsize=16)
@@ -239,13 +244,19 @@ class DocumentSeparationDataset(Dataset):
                 image_path = ""
 
             else:
-
                 image = self.get_image(i, j, k)
-                shape = image.size[1], image.size[0]  # H, W
-                text = self.get_text(i, j, k)
-                if self.mode in ["train", "val"]:
-                    target = self.target[i][j][k]
-                image_path = self.image_paths[i][j][k]
+                if image is None:
+                    shape = (0, 0)
+                    text = self.get_text(i, j, k)
+                    if self.mode in ["train", "val"]:
+                        target = self.target[i][j][k]
+                    image_path = self.image_paths[i][j][k]
+                else:
+                    shape = image.size[1], image.size[0]  # H, W
+                    text = self.get_text(i, j, k)
+                    if self.mode in ["train", "val"]:
+                        target = self.target[i][j][k]
+                    image_path = self.image_paths[i][j][k]
 
             image_paths.append(image_path)
             _images.append(image)

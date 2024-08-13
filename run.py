@@ -14,7 +14,7 @@ from data.augmentations import PadToMaxSize, SmartCompose
 
 # from data.dataloader import collate_fn
 from data.dataset import DocumentSeparationDataset
-from models.model2 import DocumentSeparator, ImageEncoder, TextEncoder
+from models.model4 import DocumentSeparator, ImageEncoder, TextEncoder
 from utils.input_utils import get_file_paths, supported_image_formats
 
 torch.set_float32_matmul_precision("high")
@@ -50,8 +50,8 @@ class Predictor:
         self.model.eval()
 
     def __call__(self, data: dict) -> torch.Tensor:
-        result_logits = self.model(data)
-        result = torch.argmax(result_logits, dim=2)
+        result_logits, _, _ = self.model(data)
+        result = torch.argmax(result_logits, dim=1)
         return result
 
 

@@ -181,7 +181,7 @@ def main(args: argparse.Namespace):
     checkpointer_val_center_acc = ModelCheckpoint(
         monitor="val_acc",
         dirpath=output_dir.joinpath("checkpoints"),
-        filename="document_separator-{epoch:02d}-{val_center_acc:.4f}",
+        filename="document_separator-{epoch:02d}-{val_acc:.4f}",
         save_top_k=3,
         mode="max",
     )
