@@ -111,10 +111,10 @@ def main(args: argparse.Namespace):
             turn_off_text=args.turn_off_text,
             turn_off_shapes=args.turn_off_shapes,
             dropout=args.dropout,
+            label_smoothing=args.label_smoothing,
         ),
         learning_rate=args.learning_rate,
         optimizer=args.optimizer,
-        label_smoothing=args.label_smoothing,
         freeze_imagenet=args.freeze_imagenet,
         freeze_roberta=args.freeze_roberta,
     )

@@ -175,6 +175,7 @@ class DocumentSeparator(nn.Module):
         text_encoder,
         output_size=2,
         dropout=0.5,
+        label_smoothing=0.0,
         turn_off_image=False,
         turn_off_text=False,
         turn_off_shapes=False,
@@ -195,6 +196,7 @@ class DocumentSeparator(nn.Module):
             nn.Linear(16, output_size),
         )
         self.dropout = nn.Dropout(dropout)
+        self.label_smoothing = label_smoothing
 
         self.accuracy = Accuracy(task="multiclass", num_classes=output_size)
 
@@ -253,7 +255,7 @@ class DocumentSeparator(nn.Module):
         if "targets" in x:
             targets = x["targets"]
             targets_center = targets[:, targets.shape[1] // 2]
-            loss = F.cross_entropy(output_center, targets_center)
+            loss = F.cross_entropy(output_center, targets_center, label_smoothing=self.label_smoothing)
             losses = {"loss": loss}
             acc = self.accuracy(output_center, targets_center)
             metrics = {"acc": acc}
