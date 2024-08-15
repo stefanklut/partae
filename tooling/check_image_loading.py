@@ -19,7 +19,6 @@ def get_arguments():
 
 
 def main(args):
-    # stats : dict[str, dict[str, int]]
     stats = defaultdict(lambda: defaultdict(int))
     file_paths = get_file_paths(args.input, formats=supported_image_formats)
 
