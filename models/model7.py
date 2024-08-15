@@ -246,8 +246,6 @@ class DocumentSeparator(nn.Module):
         # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
         output = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
         output = self.fc(output)
-        # compute difference
-        output = output[:, 1:] - output[:, :-1]
 
         output = self.flatten(output)
 

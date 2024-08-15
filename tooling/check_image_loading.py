@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageFile
+from tqdm import tqdm
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from utils.input_utils import get_file_paths, supported_image_formats
@@ -22,7 +23,7 @@ def main(args):
     stats = defaultdict(lambda: defaultdict(int))
     file_paths = get_file_paths(args.input, formats=supported_image_formats)
 
-    for file_path in file_paths:
+    for file_path in tqdm(file_paths):
         extension = file_path.suffix.lower()
         stats[extension]["total"] += 1
 
@@ -33,19 +34,18 @@ def main(args):
             stats[extension]["success"] += 1
             if np.all(np.asarray(image) == 0):
                 stats[extension]["blank"] += 1
-        except Exception:
+        except OSError:
             stats[extension]["failure"] += 1
 
-        ImageFile.LOAD_TRUNCATED_IMAGES = True
-        try:
-            image = Image.open(file_path)
-            image.load()
-            stats[extension]["success_truncated"] += 1
-            print(image)
-            if np.all(np.asarray(image) == 0):
-                stats[extension]["blank_truncated"] += 1
-        except Exception:
-            stats[extension]["failure_truncated"] += 1
+            ImageFile.LOAD_TRUNCATED_IMAGES = True
+            try:
+                image = Image.open(file_path)
+                image.load()
+                stats[extension]["success_truncated"] += 1
+                if np.all(np.asarray(image) == 0):
+                    stats[extension]["blank_truncated"] += 1
+            except OSError:
+                stats[extension]["failure_truncated"] += 1
 
     for extension in stats:
         print(f"Extension: {extension}")
