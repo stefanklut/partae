@@ -12,6 +12,8 @@ from typing import Iterable, TypedDict
 
 import numpy as np
 
+from utils.text_utils import combine_texts
+
 sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))
 from utils.logging_utils import get_logger_name
 from utils.tempdir import AtomicFileName
@@ -248,7 +250,7 @@ class PageData:
                 data["_".join([r_id, l_id])] = {
                     "text": self.get_text(line),
                     "coords": coords,
-                    "bbox": np.asarray(np.min(coords, axis=0).tolist() + np.max(coords, axis=0).tolist()),
+                    "bbox": np.asarray([np.min(coords, axis=0), np.max(coords, axis=0)]),
                     "baseline": self.get_baseline_coords(line),
                 }
         return data
@@ -256,18 +258,7 @@ class PageData:
     def get_combined_transcription(self):
         """Extracts text from each line on the XML file and combines them"""
         text = self.get_transcription()
-        total_text = ""
-        for _, text_line in text.items():
-            # If line ends with - then add it to the next line, otherwise add a space
-            text_line = text_line.strip()
-            if len(text_line) > 0:
-                if text_line[-1] == "-":
-                    text_line = text_line[:-1]
-                else:
-                    text_line += " "
-
-            total_text += text_line
-        return total_text
+        return combine_texts(text.values())
 
     def write_transcriptions(self, out_dir):
         """write out one txt file per text line"""

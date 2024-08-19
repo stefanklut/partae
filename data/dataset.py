@@ -87,7 +87,7 @@ class DocumentSeparationDataset(Dataset):
     def get_text(self, i, j, k):
         xml_path = image_path_to_xml_path(self.image_paths[i][j][k])
         page_data = PageData.from_file(xml_path)
-        text = page_data.get_combined_transcription()
+        text = page_data.get_transcription_dict()
         return text
 
     def out_of_bounds(self, i, j, k):
@@ -238,7 +238,12 @@ class DocumentSeparationDataset(Dataset):
             if self.out_of_bounds(i, j, k):
                 image = None
                 shape = (0, 0)
-                text = ""
+                text = {
+                    "text": "",
+                    "coords": None,
+                    "bbox": None,
+                    "baseline": None,
+                }
                 if self.mode in ["train", "val"]:
                     target = 0
                 image_path = ""

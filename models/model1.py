@@ -13,6 +13,8 @@ from torchvision.models import (
 )
 from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
 
+from utils.text_utils import combine_texts
+
 
 class LazyLinearBlock(nn.Module):
     def __init__(self, out_features, dropout=0.0):
@@ -213,6 +215,9 @@ class DocumentSeparator(nn.Module):
         images = x["images"]
         shapes = x["shapes"]
         texts = x["texts"]
+        for i in range(len(texts)):
+            for j in range(len(texts[i])):
+                texts[i][j] = combine_texts(x["text"] for x in texts[i][j].values())
 
         images = images.to(self.device)
         shapes = shapes.to(self.device)

@@ -12,7 +12,7 @@ from torchvision.transforms import Resize, ToTensor
 from core.trainer import ClassificationModel
 from data.augmentations import PadToMaxSize, SmartCompose
 from data.datamodule import DocumentSeparationModule
-from models.model8 import DocumentSeparator, ImageEncoder, TextEncoder
+from models.model1 import DocumentSeparator, ImageEncoder, TextEncoder
 from utils.input_utils import get_file_paths, supported_image_formats
 
 torch.set_float32_matmul_precision("high")
