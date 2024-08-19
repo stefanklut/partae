@@ -191,7 +191,36 @@ class DocumentSeparator(nn.Module):
             bidirectional=True,
             dropout=dropout,
         )
+        self.image_lstm = nn.LSTM(
+            input_size=512,
+            hidden_size=512,
+            num_layers=2,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout,
+        )
+        self.text_lstm = nn.LSTM(
+            input_size=512,
+            hidden_size=512,
+            num_layers=2,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout,
+        )
+
         self.fc = nn.Sequential(
+            LazyLinearBlock(1024, dropout=dropout),
+            LinearBlock(1024, 512, dropout=dropout),
+            nn.Linear(512, output_size),
+        )
+
+        self.image_fc = nn.Sequential(
+            LazyLinearBlock(1024, dropout=dropout),
+            LinearBlock(1024, 512, dropout=dropout),
+            nn.Linear(512, output_size),
+        )
+
+        self.text_fc = nn.Sequential(
             LazyLinearBlock(1024, dropout=dropout),
             LinearBlock(1024, 512, dropout=dropout),
             nn.Linear(512, output_size),
@@ -247,15 +276,32 @@ class DocumentSeparator(nn.Module):
         output = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
         output = self.dropout(output)
         output, _ = self.lstm(output)  # (B, N, 1024)
+        output_image, _ = self.image_lstm(images)  # (B, N, 1024)
+        output_text, _ = self.text_lstm(texts)  # (B, N, 1024)
         output = self.fc(output[:, output.shape[1] // 2])
+
+        output_center_image = self.image_fc(output_image[:, output_image.shape[1] // 2])
+        output_center_text = self.text_fc(output_text[:, output_text.shape[1] // 2])
 
         if "targets" in x:
             targets = x["targets"]
             targets_center = targets[:, targets.shape[1] // 2]
             loss = F.cross_entropy(output, targets_center, label_smoothing=self.label_smoothing)
-            losses = {"loss": loss}
+            loss_image = F.cross_entropy(output_center_image, targets_center, label_smoothing=self.label_smoothing)
+            loss_text = F.cross_entropy(output_center_text, targets_center, label_smoothing=self.label_smoothing)
+            losses = {
+                "loss_combined": loss * 0.2,
+                "loss_image": loss_image * 0.4,
+                "loss_text": loss_text * 0.4,
+            }
             acc = self.accuracy(output, targets_center)
-            metrics = {"acc": acc}
+            acc_image = self.accuracy(output_center_image, targets_center)
+            acc_text = self.accuracy(output_center_text, targets_center)
+            metrics = {
+                "acc": acc,
+                "acc_image": acc_image,
+                "acc_text": acc_text,
+            }
             return output, losses, metrics
 
         return output, None, None

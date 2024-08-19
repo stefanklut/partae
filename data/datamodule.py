@@ -62,7 +62,7 @@ class DocumentSeparationModule(pl.LightningDataModule):
 
         if val_paths is None:
             # split training paths into training and validation paths
-            training_paths, val_paths = split_training_paths(training_paths, split_ratio=0.9, seed=101)
+            training_paths, val_paths = split_training_paths(training_paths, split_ratio=0.8, seed=101)
         else:
             val_paths = natsorted(val_paths)
 

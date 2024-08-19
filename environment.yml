@@ -1,6 +1,6 @@
 name: separation
 channels:
-  # - default
+  - default
   - pytorch
   - nvidia
   - conda-forge
@@ -20,7 +20,7 @@ dependencies:
   - prometheus_client
   - imagesize
   - gunicorn
-  - openjpeg
+  - jpeg
   - pillow
   - natsort
   - termcolor

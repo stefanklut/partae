@@ -40,7 +40,10 @@ class ClassificationModel(pl.LightningModule):
         _, losses, metrics = self.model(batch)
 
         for loss in losses:
+            if loss == "loss":
+                continue
             self.log(f"train_{loss}", losses[loss], on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
+        self.log("train_loss", sum(losses.values()), on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
         for metric in metrics:
             self.log(f"train_{metric}", metrics[metric], on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
 
@@ -53,7 +56,10 @@ class ClassificationModel(pl.LightningModule):
         _, losses, metrics = self.model(batch)
 
         for loss in losses:
+            if loss == "loss":
+                continue
             self.log(f"val_{loss}", losses[loss], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
+        self.log("val_loss", sum(losses.values()), on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
         for metric in metrics:
             self.log(f"val_{metric}", metrics[metric], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
 
@@ -63,7 +69,10 @@ class ClassificationModel(pl.LightningModule):
         _, losses, metrics = self.model(batch)
 
         for loss in losses:
+            if loss == "loss":
+                continue
             self.log(f"test_{loss}", losses[loss], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
+        self.log("test_loss", sum(losses.values()), on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
         for metric in metrics:
             self.log(f"test_{metric}", metrics[metric], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
 

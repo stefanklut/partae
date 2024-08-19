@@ -322,7 +322,7 @@ class DocumentSeparator(nn.Module):
             loss_shapes = F.cross_entropy(output_shapes, targets_center)
 
             losses = {
-                "loss": loss_combined * 0.2,
+                "loss_combined": loss_combined * 0.2,
                 "loss_text": loss_text * 0.3,
                 "loss_image": loss_image * 0.3,
                 "loss_shapes": loss_shapes * 0.2,

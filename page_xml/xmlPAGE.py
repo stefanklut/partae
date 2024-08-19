@@ -135,6 +135,10 @@ class PageData:
         str_coords = element.findall("".join(["./", self.base, "Coords"]))[0].attrib.get("points").split()
         return np.array([i.split(",") for i in str_coords]).astype(np.int32)
 
+    def get_baseline_coords(self, element) -> np.ndarray:
+        str_coords = element.findall("".join(["./", self.base, "Baseline"]))[0].attrib.get("points").split()
+        return np.array([i.split(",") for i in str_coords]).astype(np.int32)
+
     def get_polygons(self, element_name):
         """
         returns a list of polygons for the element desired
@@ -232,6 +236,19 @@ class PageData:
                 l_id = self.get_id(line)
                 data["_".join([r_id, l_id])] = self.get_text(line)
 
+        return data
+
+    def get_transcription_dict(self):
+        data = {}
+        for element in self.root.findall("".join([".//", self.base, "TextRegion"])):
+            r_id = self.get_id(element)
+            for line in element.findall("".join([".//", self.base, "TextLine"])):
+                l_id = self.get_id(line)
+                data["_".join([r_id, l_id])] = {
+                    "text": self.get_text(line),
+                    "coords": self.get_coords(line),
+                    "baseline": self.get_baseline_coords(line),
+                }
         return data
 
     def get_combined_transcription(self):
