@@ -244,9 +244,11 @@ class PageData:
             r_id = self.get_id(element)
             for line in element.findall("".join([".//", self.base, "TextLine"])):
                 l_id = self.get_id(line)
+                coords = self.get_coords(line)
                 data["_".join([r_id, l_id])] = {
                     "text": self.get_text(line),
-                    "coords": self.get_coords(line),
+                    "coords": coords,
+                    "bbox": np.asarray(np.min(coords, axis=0).tolist() + np.max(coords, axis=0).tolist()),
                     "baseline": self.get_baseline_coords(line),
                 }
         return data
