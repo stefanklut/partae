@@ -106,15 +106,11 @@ def predict_class(
     Run the prediction for the given image
 
     Args:
-        image (np.ndarray): Image array send to model prediction
-        dpi (Optional[int]): DPI (dots per inch) of the image
-        image_path (Path): Path to the image file
+        data (dict[str, Any]): Data to predict on
         identifier (str): Unique identifier for the image
         model_name (str): Name of the model to use for prediction
-        whitelist (list[str]): List of characters to whitelist during prediction
 
     Raises:
-        TypeError: If the current GenPageXML is not initialized
         TypeError: If the current Predictor is not initialized
 
     Returns:

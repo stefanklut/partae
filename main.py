@@ -9,10 +9,9 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from torchvision.transforms import Resize, ToTensor
 
-from core.trainer import ClassificationModel
 from data.augmentations import PadToMaxSize, SmartCompose
 from data.datamodule import DocumentSeparationModule
-from models.model1 import DocumentSeparator, ImageEncoder, TextEncoder
+from models.model1 import DocumentSeparator
 from utils.input_utils import get_file_paths, supported_image_formats
 
 torch.set_float32_matmul_precision("high")
@@ -46,9 +45,6 @@ def get_arguments() -> argparse.Namespace:
     dataset_args.add_argument("--wrap_round", help="Wrap round", action="store_true")
 
     model_args = parser.add_argument_group("Model")
-    model_args.add_argument("--turn_off_image", help="Turn off image encoder", action="store_true")
-    model_args.add_argument("--turn_off_text", help="Turn off text encoder", action="store_true")
-    model_args.add_argument("--turn_off_shapes", help="Turn off shapes encoder", action="store_true")
     model_args.add_argument("--freeze_imagenet", help="Freeze ImageNet", action="store_true")
     model_args.add_argument("--freeze_roberta", help="Freeze RoBERTa", action="store_true")
     model_args.add_argument("--dropout", help="Dropout", type=float, default=0.5)
@@ -87,7 +83,7 @@ def main(args: argparse.Namespace):
         [
             ToTensor(),
             PadToMaxSize(),
-            Resize((224, 224)),
+            Resize((512, 512)),
         ]
     )
 
@@ -103,16 +99,9 @@ def main(args: argparse.Namespace):
         sample_same_inventory=args.sample_same_inventory,
         wrap_round=args.wrap_round,
     )
-    model = ClassificationModel(
-        model=DocumentSeparator(
-            image_encoder=ImageEncoder(merge_to_batch=True),
-            text_encoder=TextEncoder(merge_to_batch=True),
-            turn_off_image=args.turn_off_image,
-            turn_off_text=args.turn_off_text,
-            turn_off_shapes=args.turn_off_shapes,
-            dropout=args.dropout,
-            label_smoothing=args.label_smoothing,
-        ),
+    model = DocumentSeparator(
+        dropout=args.dropout,
+        label_smoothing=args.label_smoothing,
         learning_rate=args.learning_rate,
         optimizer=args.optimizer,
         freeze_imagenet=args.freeze_imagenet,

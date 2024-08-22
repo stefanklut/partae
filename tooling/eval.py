@@ -9,7 +9,6 @@ from torchvision.transforms import Resize, ToTensor
 from tqdm import tqdm
 
 sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))
-from core.trainer import ClassificationModel
 from data.augmentations import PadToMaxSize, SmartCompose
 from data.convert_xlsx import link_with_paths
 from data.dataloader import collate_fn
@@ -64,18 +63,12 @@ def main(args: argparse.Namespace):
         collate_fn=collate_fn,
     )
 
-    model = DocumentSeparator(
-        image_encoder=ImageEncoder(merge_to_batch=True),
-        text_encoder=TextEncoder(merge_to_batch=True),
-        output_size=2,
-    )
-
     def get_middle_scan(y):
         i = y.shape[1] // 2
         return y[:, i]
 
     if args.checkpoint:
-        model = ClassificationModel.load_from_checkpoint(args.checkpoint, model=model)
+        model = DocumentSeparator.load_from_checkpoint(args.checkpoint)
 
     rules = RulesBased()
 

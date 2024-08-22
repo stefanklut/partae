@@ -1,3 +1,5 @@
+from typing import override
+
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -12,7 +14,6 @@ from torchvision import datasets, transforms
 class ClassificationModel(pl.LightningModule):
     def __init__(
         self,
-        model,
         learning_rate=1e-5,
         optimizer="Adam",
         label_smoothing=0.1,
@@ -20,7 +21,6 @@ class ClassificationModel(pl.LightningModule):
         freeze_roberta=False,
     ):
         super(ClassificationModel, self).__init__()
-        self.model = model
         self.learning_rate = learning_rate
 
         self.optimizer = optimizer
@@ -28,16 +28,18 @@ class ClassificationModel(pl.LightningModule):
         self.freeze_imagenet = freeze_imagenet
         self.freeze_roberta = freeze_roberta
 
+    @override
     def forward(self, x):
-        return self.model(x)
+        raise NotImplementedError
 
-    def get_middle_scan(self, y):
+    @staticmethod
+    def get_middle(y):
         return y[:, y.shape[1] // 2]
 
     def training_step(self, batch, batch_idx):
         B = batch["images"].shape[0]
 
-        _, losses, metrics = self.model(batch)
+        _, losses, metrics = self(batch)
 
         for loss in losses:
             if loss == "loss":
@@ -53,7 +55,7 @@ class ClassificationModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         B = batch["images"].shape[0]
 
-        _, losses, metrics = self.model(batch)
+        _, losses, metrics = self(batch)
 
         for loss in losses:
             if loss == "loss":
@@ -66,7 +68,7 @@ class ClassificationModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         B = batch["images"].shape[0]
 
-        _, losses, metrics = self.model(batch)
+        _, losses, metrics = self(batch)
 
         for loss in losses:
             if loss == "loss":
@@ -78,7 +80,7 @@ class ClassificationModel(pl.LightningModule):
 
     def configure_optimizers(self):
         param_groups = []
-        for name, param in self.model.named_parameters():
+        for name, param in self.named_parameters():
             if "imagenet" in name:
                 if self.freeze_imagenet:
                     param.requires_grad = False

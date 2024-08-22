@@ -239,10 +239,12 @@ class DocumentSeparationDataset(Dataset):
                 image = None
                 shape = (0, 0)
                 text = {
-                    "text": "",
-                    "coords": None,
-                    "bbox": None,
-                    "baseline": None,
+                    None: {
+                        "text": "",
+                        "coords": None,
+                        "bbox": None,
+                        "baseline": None,
+                    }
                 }
                 if self.mode in ["train", "val"]:
                     target = 0

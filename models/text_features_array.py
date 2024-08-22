@@ -32,7 +32,7 @@ class TextEncoder(nn.Module):
 
         self.fc = nn.Sequential(
             LazyLinearBlock(512),
-            nn.Linear(512, 16),
+            nn.Linear(512, 512),
         )
 
     @property
@@ -48,7 +48,7 @@ class TextEncoder(nn.Module):
         # Encode the text
         encoded_text = self.roberta(**encoded_text).last_hidden_state  # (B, S, 768)
         encoded_text = encoded_text[:, 0]  # (B, 768)
-        encoded_text = self.fc(encoded_text)  # (B, 16)
+        encoded_text = self.fc(encoded_text)  # (B, 512)
 
         return encoded_text
 
@@ -57,9 +57,18 @@ class TextEncoder(nn.Module):
 
 
 class TextFeaturesArray(nn.Module):
-    def __init__(self, channels, height, width, old_height=None, old_width=None, mode="baseline", merge_to_batch=True):
+    def __init__(
+        self,
+        channels,
+        height,
+        width,
+        old_height=None,
+        old_width=None,
+        text_encoder=TextEncoder(merge_to_batch=True),
+        mode="baseline",
+    ):
         super(TextFeaturesArray, self).__init__()
-        self.text_encoder = TextEncoder(merge_to_batch=merge_to_batch)
+        self.text_encoder = text_encoder
         self.channels = channels
         self.height = height
         self.width = width
@@ -68,9 +77,11 @@ class TextFeaturesArray(nn.Module):
         self.mode = mode
 
     def forward(self, x: list[list[dict]]):
-        batch_size = len(x)
+        B = len(x)
+        N = len(x[0])
         sum_array = torch.zeros(
-            batch_size,
+            B,
+            N,
             self.channels,
             self.height,
             self.width,
@@ -78,36 +89,36 @@ class TextFeaturesArray(nn.Module):
             device=self.text_encoder.device,
         )
         sum_mask = torch.zeros(
-            batch_size,
+            B,
+            N,
             self.height,
             self.width,
             dtype=torch.float32,
             device=self.text_encoder.device,
         )
-        for i, document in enumerate(x):
-            for text_line in document:
-                encoded_text = self.text_encoder([text_line["text"]])
-                baseline = text_line["baseline"]
-                bbox = text_line["bbox"]
+        for i, batch in enumerate(x):
+            for j, document in enumerate(batch):
+                for text_line in document.values():
+                    encoded_text = self.text_encoder([text_line["text"]])
+                    scale = np.array([self.height / self.old_height, self.width / self.old_width])
 
-                # Scale the baseline and bbox to the new image size
-                if self.old_height is not None and self.old_width is not None:
-                    baseline = baseline * self.height / self.old_height
-                    bbox = bbox * self.height / self.old_height
+                    # Add the text to the array
+                    if self.mode == "baseline":
+                        baseline = text_line["baseline"]
+                        baseline = (baseline * scale).round().astype(int)
+                        mask = np.zeros((self.height, self.width))
+                        mask = cv2.polylines(mask, [baseline], False, 1, 1)
+                        mask = torch.from_numpy(mask).to(dtype=torch.bool, device=self.text_encoder.device)[:, :]
+                    elif self.mode == "bbox":
+                        bbox = text_line["bbox"]
+                        bbox = (bbox * scale).round().astype(int)
+                        mask = torch.zeros(self.height, self.width, dtype=torch.bool)
+                        mask[bbox[1] : bbox[3], bbox[0] : bbox[2]] = 1
+                    else:
+                        raise ValueError(f"Unknown mode: {self.mode}")
 
-                # Add the text to the array
-                if self.mode == "baseline":
-                    mask = np.zeros((self.height, self.width))
-                    mask = cv2.polylines(mask, [baseline.numpy().round().astype(int)], False, 1, 1)
-                    mask = torch.from_numpy(mask).to(dtype=torch.bool, device=self.text_encoder.device)[:, :]
-                elif self.mode == "bbox":
-                    mask = torch.zeros(self.height, self.width, dtype=torch.bool)
-                    mask[bbox[1] : bbox[3], bbox[0] : bbox[2]] = 1
-                else:
-                    raise ValueError(f"Unknown mode: {self.mode}")
-
-                sum_array[i, :, mask] = sum_array[i, :, mask] + encoded_text[..., None]
-                sum_mask[i] = sum_mask[i] + mask
+                    sum_array[i, j, :, mask] = sum_array[i, j, :, mask] + encoded_text[..., None]
+                    sum_mask[i, j] = sum_mask[i, j] + mask
 
             avg_array = sum_array / torch.maximum(sum_mask, torch.ones_like(sum_mask))
 

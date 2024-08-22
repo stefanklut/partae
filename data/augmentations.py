@@ -8,6 +8,12 @@ from PIL.Image import Image
 
 class _ApplyToList(torch.nn.Module):
     def __init__(self, fn):
+        """
+        Apply a function to a list of tensors
+
+        Args:
+            fn (function): _description_
+        """
         super(_ApplyToList, self).__init__()
         self.fn = fn
 
@@ -25,6 +31,9 @@ class _ApplyToList(torch.nn.Module):
 
 class PadToMaxSize(_ApplyToList):
     def __init__(self):
+        """
+        Apply padding to a list of tensors to make them the same size
+        """
         fn = None
         super(PadToMaxSize, self).__init__(fn)
 
@@ -82,6 +91,12 @@ class PadToMaxSize(_ApplyToList):
 
 class SmartCompose(torch.nn.Module):
     def __init__(self, transforms):
+        """
+        Apply a list of transformations to an image or list of images
+
+        Args:
+            transforms (Transform/_ApplyToList): the transformations to apply
+        """
         super(SmartCompose, self).__init__()
         self.transforms = transforms
 

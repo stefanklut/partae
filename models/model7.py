@@ -13,6 +13,7 @@ from torchvision.models import (
 )
 from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
 
+from models.model_base import ClassificationModel
 from utils.text_utils import combine_texts
 
 
@@ -170,19 +171,17 @@ class TextEncoder(nn.Module):
         return encoded_texts
 
 
-class DocumentSeparator(nn.Module):
+class DocumentSeparator(ClassificationModel):
     def __init__(
         self,
-        image_encoder,
-        text_encoder,
+        image_encoder=ImageEncoder(merge_to_batch=True),
+        text_encoder=TextEncoder(merge_to_batch=True),
         output_size=2,
         dropout=0.5,
         label_smoothing=0.0,
-        turn_off_image=False,
-        turn_off_text=False,
-        turn_off_shapes=False,
+        **kwargs,
     ):
-        super(DocumentSeparator, self).__init__()
+        super(DocumentSeparator, self).__init__(**kwargs)
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
         self.fc = nn.Sequential(
@@ -201,9 +200,6 @@ class DocumentSeparator(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.label_smoothing = label_smoothing
 
-        self.turn_off_image = turn_off_image
-        self.turn_off_text = turn_off_text
-        self.turn_off_shapes = turn_off_shapes
         self.accuracy = Accuracy(task="multiclass", num_classes=output_size)
 
     @property
@@ -222,33 +218,17 @@ class DocumentSeparator(nn.Module):
         images = images.to(self.device)
         shapes = shapes.to(self.device)
 
-        if self.turn_off_image:
-            B, N, C, H, W = images.size()
-            images = torch.zeros((B, N, 512), device=self.device)
-        else:
-            images = self.image_encoder(images)
-
-        if self.turn_off_text:
-            B, N = len(texts), len(texts[0])
-            texts = torch.zeros((B, N, 512), device=self.device)
-        else:
-            texts = self.text_encoder(texts)
+        images = self.image_encoder(images)
+        texts = self.text_encoder(texts)
 
         if torch.logical_xor(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0).any():
             raise ValueError("One of the shapes is 0, both should be 0 (no image) or both should be non-zero (normal image)")
+        both_zero = torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0)
+        inverted_shapes = 1 / shapes
+        inverted_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), inverted_shapes)
+        ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
+        ratio_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), ratio_shapes)
 
-        if self.turn_off_shapes:
-            B, N = len(shapes), len(shapes[0])
-            inverted_shapes = torch.zeros((B, N, 2), device=self.device)
-            ratio_shapes = torch.zeros((B, N, 1), device=self.device)
-        else:
-            both_zero = torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0)
-            inverted_shapes = 1 / shapes
-            inverted_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), inverted_shapes)
-            ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
-            ratio_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), ratio_shapes)
-
-        # IDEA Add the image height and width to the embedding, but maybe invert them to keep them close to 0
         output = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
         output = self.fc(output)
 

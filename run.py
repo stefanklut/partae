@@ -9,7 +9,6 @@ from natsort import natsorted
 from torchvision.transforms import Resize, ToTensor
 from tqdm import tqdm
 
-from core.trainer import ClassificationModel
 from data.augmentations import PadToMaxSize, SmartCompose
 
 # from data.dataloader import collate_fn
@@ -37,16 +36,10 @@ class Predictor:
         self,
         checkpoint: str | Path,
     ) -> None:
-        model = DocumentSeparator(
-            image_encoder=ImageEncoder(merge_to_batch=True),
-            text_encoder=TextEncoder(merge_to_batch=True),
-            output_size=2,
-        )
-
         if not checkpoint:
             raise ValueError("No checkpoint provided")
 
-        self.model = ClassificationModel.load_from_checkpoint(checkpoint, model=model)
+        self.model = DocumentSeparator.load_from_checkpoint(checkpoint)
         self.model.eval()
 
     def __call__(self, data: dict) -> torch.Tensor:
@@ -112,12 +105,12 @@ class SavePredictor(Predictor):
     def set_input_paths(self, input_paths: list[Path]) -> None:
         paths = get_file_paths(input_paths, formats=supported_image_formats)
 
-        training_paths = natsorted(paths)
+        input_paths = natsorted(paths)
         # Group the paths by parent folder
-        grouped_paths = [list(group) for _, group in itertools.groupby(training_paths, key=lambda x: x.parent)]
-        paths = [[group] for group in grouped_paths]
+        grouped_paths = [list(group) for _, group in itertools.groupby(input_paths, key=lambda x: x.parent)]
+        grouped_paths = [[group] for group in grouped_paths]
 
-        self.input_paths = paths
+        self.input_paths = grouped_paths
 
     def set_output_path(self, output_dir: Path | str) -> None:
         if isinstance(output_dir, str):
