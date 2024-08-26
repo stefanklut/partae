@@ -41,6 +41,11 @@ def split_training_paths(
     split_training_paths = list(itertools.chain.from_iterable(grouped_training_paths[:split_idx]))
     split_val_paths = list(itertools.chain.from_iterable(grouped_training_paths[split_idx:]))
 
+    if len(split_training_paths) == 0:
+        raise ValueError("Split did not have enough directories for training")
+    if len(split_val_paths) == 0:
+        raise ValueError("Split did not have enough directories for validation")
+
     return split_training_paths, split_val_paths
 
 
@@ -57,12 +62,13 @@ class DocumentSeparationModule(pl.LightningDataModule):
         randomize_document_order: bool = True,
         sample_same_inventory: bool = False,
         wrap_round: bool = False,
+        split_ratio: float = 0.8,
     ):
         super().__init__()
 
         if val_paths is None:
             # split training paths into training and validation paths
-            training_paths, val_paths = split_training_paths(training_paths, split_ratio=0.8, seed=101)
+            training_paths, val_paths = split_training_paths(training_paths, split_ratio=split_ratio, seed=101)
         else:
             val_paths = natsorted(val_paths)
 

@@ -9,12 +9,27 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from torchvision.transforms import Resize, ToTensor
 
+from core.callbacks import NamedBackboneFinetuning
 from data.augmentations import PadToMaxSize, SmartCompose
 from data.datamodule import DocumentSeparationModule
 from models.model1 import DocumentSeparator
 from utils.input_utils import get_file_paths, supported_image_formats
 
 torch.set_float32_matmul_precision("high")
+
+
+def int_or_float(value: str):
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            float_value = float(value)
+            if 0 <= float_value <= 1:
+                return float_value
+            else:
+                raise argparse.ArgumentTypeError(f"Invalid value float should be between 0 and 1: {value}")
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"Invalid value type should be int or float: {value}")
 
 
 def get_arguments() -> argparse.Namespace:
@@ -43,10 +58,15 @@ def get_arguments() -> argparse.Namespace:
     dataset_args.add_argument("--randomize_document_order", help="Randomize document order", action="store_true")
     dataset_args.add_argument("--sample_same_inventory", help="Sample same inventory", action="store_true")
     dataset_args.add_argument("--wrap_round", help="Wrap round", action="store_true")
+    dataset_args.add_argument("--split_ratio", help="Split ratio", type=float, default=0.8)
 
     model_args = parser.add_argument_group("Model")
-    model_args.add_argument("--freeze_imagenet", help="Freeze ImageNet", action="store_true")
-    model_args.add_argument("--freeze_roberta", help="Freeze RoBERTa", action="store_true")
+    model_args.add_argument(
+        "--unfreeze_imagenet", help="Unfreeze ImageNet after epochs or percentage of epochs", type=int_or_float, default=0.0
+    )
+    model_args.add_argument(
+        "--unfreeze_roberta", help="Unfreeze RoBERTa after epochs or percentage of epochs", type=int_or_float, default=0.0
+    )
     model_args.add_argument("--dropout", help="Dropout", type=float, default=0.5)
 
     args = parser.parse_args()
@@ -98,14 +118,13 @@ def main(args: argparse.Namespace):
         randomize_document_order=args.randomize_document_order,
         sample_same_inventory=args.sample_same_inventory,
         wrap_round=args.wrap_round,
+        split_ratio=args.split_ratio,
     )
     model = DocumentSeparator(
         dropout=args.dropout,
         label_smoothing=args.label_smoothing,
         learning_rate=args.learning_rate,
         optimizer=args.optimizer,
-        freeze_imagenet=args.freeze_imagenet,
-        freeze_roberta=args.freeze_roberta,
     )
 
     logger = TensorBoardLogger("lightning_logs", name=args.output)
@@ -183,9 +202,35 @@ def main(args: argparse.Namespace):
         save_last="link",
     )
 
+    unfreeze_imagenet_epoch = (
+        args.unfreeze_imagenet if isinstance(args.unfreeze_imagenet, int) else int(args.epochs * args.unfreeze_imagenet)
+    )
+    freeze_imagenet = NamedBackboneFinetuning(
+        name="imagenet",
+        unfreeze_at_epoch=unfreeze_imagenet_epoch,
+        lambda_func=lambda epoch: 1.5,
+        train_bn=False,
+    )
+
+    unfreeze_roberta_epoch = (
+        args.unfreeze_roberta if isinstance(args.unfreeze_roberta, int) else int(args.epochs * args.unfreeze_roberta)
+    )
+    freeze_roberta = NamedBackboneFinetuning(
+        name="roberta",
+        unfreeze_at_epoch=unfreeze_roberta_epoch,
+        lambda_func=lambda epoch: 1.5,
+        train_bn=False,
+    )
+
     trainer = Trainer(
         max_epochs=args.epochs,
-        callbacks=[checkpointer_val_loss, checkpointer_epoch, checkpointer_val_center_acc],
+        callbacks=[
+            checkpointer_val_loss,
+            checkpointer_epoch,
+            checkpointer_val_center_acc,
+            freeze_imagenet,
+            freeze_roberta,
+        ],
         val_check_interval=0.25,
         logger=logger,
     )

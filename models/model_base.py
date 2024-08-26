@@ -79,26 +79,11 @@ class ClassificationModel(pl.LightningModule):
             self.log(f"test_{metric}", metrics[metric], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
 
     def configure_optimizers(self):
-        param_groups = []
-        for name, param in self.named_parameters():
-            if "imagenet" in name:
-                if self.freeze_imagenet:
-                    param.requires_grad = False
-                    lr = 0
-                lr = self.learning_rate * 0.01
-            if "roberta" in name:
-                if self.freeze_roberta:
-                    param.requires_grad = False
-                    lr = 0
-                lr = self.learning_rate * 0.01
-            else:
-                lr = self.learning_rate
-            param_groups.append({"params": param, "lr": lr})
 
         if self.optimizer == "Adam":
-            optimizer = optim.Adam(param_groups, lr=self.learning_rate)
+            optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate)
         elif self.optimizer == "SGD":
-            optimizer = optim.SGD(param_groups, lr=self.learning_rate)
+            optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate)
         else:
             raise ValueError(f"Optimizer {self.optimizer} not supported")
         return optimizer
