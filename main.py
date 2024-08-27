@@ -46,12 +46,12 @@ def get_arguments() -> argparse.Namespace:
     io_args.add_argument("-o", "--output", help="Output folder", type=str, default="document_separator")
 
     training_args = parser.add_argument_group("Training")
-    training_args.add_argument("-e", "--epochs", help="Number of epochs", type=int, default=10)
-    training_args.add_argument("-b", "--batch_size", help="Batch size", type=int, default=32)
-    training_args.add_argument("--num_workers", help="Number of workers", type=int, default=16)
+    training_args.add_argument("-e", "--epochs", help="Number of epochs", type=int, default=40)
+    training_args.add_argument("-b", "--batch_size", help="Batch size", type=int, default=4)
+    training_args.add_argument("--num_workers", help="Number of workers", type=int, default=4)
     training_args.add_argument("--learning_rate", help="Learning rate", type=float, default=1e-5)
     training_args.add_argument("--optimizer", help="Optimizer", type=str, default="Adam")
-    training_args.add_argument("--label_smoothing", help="Label smoothing", type=float, default=0.0)
+    training_args.add_argument("--label_smoothing", help="Label smoothing", type=float, default=0.2)
 
     dataset_args = parser.add_argument_group("Dataset")
     dataset_args.add_argument("-n", "--number_of_images", help="Number of images", type=int, default=3)
@@ -62,10 +62,10 @@ def get_arguments() -> argparse.Namespace:
 
     model_args = parser.add_argument_group("Model")
     model_args.add_argument(
-        "--unfreeze_imagenet", help="Unfreeze ImageNet after epochs or percentage of epochs", type=int_or_float, default=0.0
+        "--unfreeze_imagenet", help="Unfreeze ImageNet after epochs or percentage of epochs", type=int_or_float, default=0.5
     )
     model_args.add_argument(
-        "--unfreeze_roberta", help="Unfreeze RoBERTa after epochs or percentage of epochs", type=int_or_float, default=0.0
+        "--unfreeze_roberta", help="Unfreeze RoBERTa after epochs or percentage of epochs", type=int_or_float, default=0.5
     )
     model_args.add_argument("--dropout", help="Dropout", type=float, default=0.5)
 
