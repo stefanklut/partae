@@ -141,6 +141,11 @@ def main(args: argparse.Namespace):
         for key, value in vars(args).items():
             file.write(f"{key}: {value}\n")
 
+    # Save model summary
+    with output_dir.joinpath("model_summary").open("w") as file:
+        file.write(f"{model.__class__.__module__}.{model.__class__.__qualname__}\n")
+        file.write(str(model))
+
     # Save what data is used
     output_dir.joinpath("data").mkdir(exist_ok=True)
     num_inventories_train = 0
@@ -205,6 +210,7 @@ def main(args: argparse.Namespace):
     unfreeze_imagenet_epoch = (
         args.unfreeze_imagenet if isinstance(args.unfreeze_imagenet, int) else int(args.epochs * args.unfreeze_imagenet)
     )
+    print(unfreeze_imagenet_epoch)
     freeze_imagenet = NamedBackboneFinetuning(
         name="imagenet",
         unfreeze_at_epoch=unfreeze_imagenet_epoch,
@@ -215,6 +221,7 @@ def main(args: argparse.Namespace):
     unfreeze_roberta_epoch = (
         args.unfreeze_roberta if isinstance(args.unfreeze_roberta, int) else int(args.epochs * args.unfreeze_roberta)
     )
+    print(unfreeze_roberta_epoch)
     freeze_roberta = NamedBackboneFinetuning(
         name="roberta",
         unfreeze_at_epoch=unfreeze_roberta_epoch,

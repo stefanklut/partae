@@ -119,8 +119,6 @@ class NamedBackboneFinetuning(BaseFinetuning):
     def finetune_function(self, pl_module: "pl.LightningModule", epoch: int, optimizer: Optimizer) -> None:
         """Called when the epoch begins."""
 
-        print("Epoch: ", epoch)
-        print("Unfreeze at epoch: ", self.unfreeze_at_epoch)
         if self.unfreeze_at_epoch < 0:
             return
         elif epoch == self.unfreeze_at_epoch:

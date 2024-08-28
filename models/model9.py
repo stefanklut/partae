@@ -106,7 +106,8 @@ class ImageEncoder(nn.Module):
 
 class TextEncoder(nn.Module):
     def __init__(self):
-        self.text_feature_array = TextFeaturesArray(16, 16, 512, 512, mode="baseline")
+        super(TextEncoder, self).__init__()
+        self.text_feature_array = TextFeaturesArray(512, 16, 16, 512, 512, mode="baseline")
 
     def forward(self, x: list[list[dict]]):
         return self.text_feature_array(x)
@@ -134,9 +135,10 @@ class DocumentSeparator(ClassificationModel):
         texts = x["texts"]
         shapes = x["shapes"]
 
-        resize_size = image_encoder.resize_size
+        encoded_images = self.image_encoder(images)
+        encoded_texts = self.text_encoder(texts)
 
-        scale = resize_size / torch.amax(shapes, dim=(0, 1))
+        print(encoded_images.shape, encoded_texts.shape)
 
 
 if __name__ == "__main__":
@@ -163,4 +165,7 @@ if __name__ == "__main__":
 
     encoded_text = text_encoder(x2)
 
-    print(encoded_text.shape)
+    document_separator = DocumentSeparator()
+    data = {"images": x, "texts": x2, "shapes": torch.randn(2, 3, 2)}
+    output = document_separator(data)
+    print(output)
