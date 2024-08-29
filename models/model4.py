@@ -115,7 +115,7 @@ class TextEncoder(nn.Module):
         self.merge_to_batch = merge_to_batch
 
         self.tokenizer = RobertaTokenizer.from_pretrained("pdelobelle/robbert-v2-dutch-base")
-        self.roberta = RobertaModel.from_pretrained("pdelobelle/robbert-v2-dutch-base")
+        self.roberta = RobertaModel.from_pretrained("pdelobelle/robbert-v2-dutch-base", add_pooling_layer=False)
 
         self.fc = nn.Sequential(
             LazyLinearBlock(512),

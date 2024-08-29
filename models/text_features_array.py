@@ -23,16 +23,16 @@ class LazyLinearBlock(nn.Module):
 
 
 class TextEncoder(nn.Module):
-    def __init__(self, merge_to_batch=True):
+    def __init__(self, channels=512, merge_to_batch=True):
         super(TextEncoder, self).__init__()
         self.merge_to_batch = merge_to_batch
 
         self.tokenizer = RobertaTokenizer.from_pretrained("pdelobelle/robbert-v2-dutch-base")
-        self.roberta = RobertaModel.from_pretrained("pdelobelle/robbert-v2-dutch-base")
+        self.roberta = RobertaModel.from_pretrained("pdelobelle/robbert-v2-dutch-base", add_pooling_layer=False)
 
         self.fc = nn.Sequential(
             LazyLinearBlock(512),
-            nn.Linear(512, 512),
+            nn.Linear(512, channels),
         )
 
     @property
@@ -48,7 +48,7 @@ class TextEncoder(nn.Module):
         # Encode the text
         encoded_text = self.roberta(**encoded_text).last_hidden_state  # (B, S, 768)
         encoded_text = encoded_text[:, 0]  # (B, 768)
-        encoded_text = self.fc(encoded_text)  # (B, 512)
+        encoded_text = self.fc(encoded_text)  # (B, channels)
 
         return encoded_text
 
@@ -76,7 +76,7 @@ class TextFeaturesArray(nn.Module):
         self.old_width = old_width
         self.mode = mode
 
-    def forward(self, x: list[list[dict]]):
+    def forward(self, x: list[list[dict]], old_height=None, old_width=None):
         B = len(x)
         N = len(x[0])
         sum_array = torch.zeros(
@@ -91,26 +91,38 @@ class TextFeaturesArray(nn.Module):
         sum_mask = torch.zeros(
             B,
             N,
+            1,
             self.height,
             self.width,
             dtype=torch.float32,
             device=self.text_encoder.device,
         )
+        if old_height is not None:
+            self.old_height = old_height
+        if old_width is not None:
+            self.old_width = old_width
+
+        scale = np.array([self.height / self.old_height, self.width / self.old_width])
         for i, batch in enumerate(x):
             for j, document in enumerate(batch):
                 for text_line in document.values():
+                    if text_line["text"] == "":
+                        continue
                     encoded_text = self.text_encoder([text_line["text"]])
-                    scale = np.array([self.height / self.old_height, self.width / self.old_width])
 
                     # Add the text to the array
                     if self.mode == "baseline":
                         baseline = text_line["baseline"]
+                        if baseline is None:
+                            continue
                         baseline = (baseline * scale).round().astype(int)
                         mask = np.zeros((self.height, self.width))
                         mask = cv2.polylines(mask, [baseline], False, 1, 1)
                         mask = torch.from_numpy(mask).to(dtype=torch.bool, device=self.text_encoder.device)[:, :]
                     elif self.mode == "bbox":
                         bbox = text_line["bbox"]
+                        if bbox is None:
+                            continue
                         bbox = (bbox * scale).round().astype(int)
                         mask = torch.zeros(self.height, self.width, dtype=torch.bool)
                         mask[bbox[1] : bbox[3], bbox[0] : bbox[2]] = 1
