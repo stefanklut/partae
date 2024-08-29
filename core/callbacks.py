@@ -133,10 +133,6 @@ class NamedBackboneFinetuning(BaseFinetuning):
                 initial_denom_lr=self.initial_denom_lr,
             )
 
-            print("Unfreezing")
-            for module in self.find_named_module(pl_module):
-                for name, param in module.named_parameters():
-                    print(f"{name}: {param.requires_grad}")
             if self.verbose:
                 log.info(f"Current lr: {round(current_lr, self.rounding)}, " f"Backbone lr: {round(initial_lr, self.rounding)}")
 

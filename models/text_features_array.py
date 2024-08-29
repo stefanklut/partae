@@ -66,6 +66,7 @@ class TextFeaturesArray(nn.Module):
         old_width=None,
         text_encoder=TextEncoder(merge_to_batch=True),
         mode="baseline",
+        thickness=1,
     ):
         super(TextFeaturesArray, self).__init__()
         self.text_encoder = text_encoder
@@ -75,6 +76,7 @@ class TextFeaturesArray(nn.Module):
         self.old_height = old_height
         self.old_width = old_width
         self.mode = mode
+        self.thickness = thickness
 
     def forward(self, x: list[list[dict]], old_height=None, old_width=None):
         B = len(x)
@@ -102,7 +104,7 @@ class TextFeaturesArray(nn.Module):
         if old_width is not None:
             self.old_width = old_width
 
-        scale = np.array([self.height / self.old_height, self.width / self.old_width])
+        scale = (np.array([self.width, self.height]) - 1) / (np.array([self.old_width, self.old_height]) - 1)
         for i, batch in enumerate(x):
             for j, document in enumerate(batch):
                 for text_line in document.values():
@@ -115,9 +117,10 @@ class TextFeaturesArray(nn.Module):
                         baseline = text_line["baseline"]
                         if baseline is None:
                             continue
-                        baseline = (baseline * scale).round().astype(int)
+                        scaled_baseline = (baseline * scale).round().astype(int)
                         mask = np.zeros((self.height, self.width))
-                        mask = cv2.polylines(mask, [baseline], False, 1, 1)
+
+                        mask = cv2.polylines(mask, [scaled_baseline], False, 1, self.thickness)
                         mask = torch.from_numpy(mask).to(dtype=torch.bool, device=self.text_encoder.device)[:, :]
                     elif self.mode == "bbox":
                         bbox = text_line["bbox"]
