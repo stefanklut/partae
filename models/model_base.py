@@ -1,4 +1,7 @@
-from typing import override
+try:
+    from typing import override
+except ImportError:
+    override = lambda x: x
 
 import pytorch_lightning as pl
 import torch

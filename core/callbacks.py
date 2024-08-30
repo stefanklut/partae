@@ -1,5 +1,11 @@
 import logging
-from typing import Any, Callable, Dict, Iterable, Optional, Union, override
+from typing import Any, Callable, Dict, Iterable, Optional, Union
+
+try:
+    from typing import override
+except ImportError:
+    override = lambda x: x
+
 
 import pytorch_lightning as pl
 from pytorch_lightning import LightningModule, Trainer
@@ -78,6 +84,7 @@ class NamedBackboneFinetuning(BaseFinetuning):
     def find_named_module(self, pl_module: LightningModule) -> Iterable[nn.Module]:
         return [module for name, module in pl_module.named_modules() if name.endswith(self.name)]
 
+    @override
     def unfreeze_and_add_param_group(
         self,
         modules: Union[Module, Iterable[Union[Module, Iterable]]],

@@ -209,6 +209,7 @@ class DocumentSeparator(ClassificationModel):
         self.label_smoothing = label_smoothing
 
         self.accuracy = Accuracy(task="multiclass", num_classes=output_size)
+        self.cosine_embedding_loss = nn.CosineEmbeddingLoss()
 
     @property
     @lru_cache
