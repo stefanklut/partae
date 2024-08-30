@@ -1,3 +1,5 @@
+# Place text features into an array that is combined with image features
+
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -259,7 +261,7 @@ if __name__ == "__main__":
         ],
     ]
 
-    text_encoder = TextFeaturesArray(512, 16, 16, 512, 512, mode="baseline")
+    text_encoder = TextEncoder()
 
     encoded_text = text_encoder(x2)
     print(encoded_text.shape)

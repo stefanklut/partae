@@ -1,5 +1,8 @@
+# Extra conv layer in image encoder and loss function only on the center of the output x[:, x.shape[1] // 2]. Smaller feature size (16 instead of 512).
+
 from functools import lru_cache
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -246,20 +249,47 @@ class DocumentSeparator(ClassificationModel):
 
 
 if __name__ == "__main__":
-    image_encoder = ImageEncoder(merge_to_batch=True)
-    image_encoder2 = ImageEncoder(merge_to_batch=False)
-    images = torch.randn(2, 3, 3, 224, 224)
-    encoded_images = image_encoder(images)
-    encoded_images2 = image_encoder2(images)
-    print(encoded_images.size())
-    print(encoded_images2.size())
+    # Test ImageEncoder
+    image_encoder = ImageEncoder()
+    x = torch.randn(1, 3, 3, 512, 512)
+    encoded_images = image_encoder(x)
+    print(encoded_images.shape)
+
+    x2 = [
+        [
+            {
+                "id": {
+                    "text": "Hello, world!",
+                    "baseline": np.array([[1, 1], [2, 2]]),
+                    "bbox": np.array([1, 1, 1, 1]),
+                    "coords": np.array([[1, 2], [2, 3]]),
+                }
+            },
+            {
+                "id": {
+                    "text": "Hello, world!",
+                    "baseline": np.array([[1, 1], [2, 2]]),
+                    "bbox": np.array([1, 1, 1, 1]),
+                    "coords": np.array([[1, 2], [2, 3]]),
+                }
+            },
+            {
+                "id": {
+                    "text": "Hello, world!",
+                    "baseline": np.array([[1, 1], [2, 2]]),
+                    "bbox": np.array([1, 1, 1, 1]),
+                    "coords": np.array([[1, 2], [2, 3]]),
+                }
+            },
+        ],
+    ]
 
     text_encoder = TextEncoder()
-    texts = [["Hello", "world", "Holy"], ["This", "is", "test"]]
-    encoded_texts = text_encoder(texts)
-    print(encoded_texts.size())
 
-    data = {"image": images, "text": texts}
-    document_separator = DocumentSeparator(image_encoder, text_encoder)
-    output = document_separator(data)
-    print(output.size())
+    encoded_text = text_encoder(x2)
+    print(encoded_text.shape)
+
+    document_separator = DocumentSeparator()
+    data = {"images": x, "texts": x2, "shapes": torch.randn(1, 3, 2)}
+    output, _, _ = document_separator(data)
+    print(output.shape)
