@@ -1,8 +1,5 @@
-# Place text features into an array that is combined with image features, apply cosine similarity loss to the combined features to make feature of the same document similar
-
-import sys
+# Cosine similarity between scans from the same document should be high, add extra conv to image encoder and larger image size
 from functools import lru_cache
-from pathlib import Path
 
 import numpy as np
 import torch
@@ -18,9 +15,7 @@ from torchvision.models import (
 )
 from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
 
-sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))
 from models.model_base import ClassificationModel
-from models.text_features_array import TextFeaturesArray
 from utils.text_utils import combine_texts
 
 
@@ -59,6 +54,18 @@ class ImageEncoder(nn.Module):
 
         imagenet = torchvision.models.resnet34(weights=ResNet34_Weights.DEFAULT)
         self.imagenet = nn.Sequential(*list(imagenet.children())[:-2])
+        self.conv2d = nn.Sequential(
+            nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+        )
+        self.flatten = nn.Flatten(1, -1)
+        self.fc = nn.Sequential(
+            LazyLinearBlock(2048),
+            LinearBlock(2048, 1024),
+            nn.Linear(1024, 512),
+        )
 
     @property
     @lru_cache
@@ -69,6 +76,8 @@ class ImageEncoder(nn.Module):
         image = image.to(self.device)  # (B, C, H, W)
         encoded_image = F.interpolate(image, self.resize_size)  # (B, C, resize_size[0], resize_size[1])
         encoded_image = self.imagenet(encoded_image)  # (B, 2048, ...)
+        encoded_image = self.flatten(encoded_image)  # (B, 2048 * ...)
+        encoded_image = self.fc(encoded_image)  # (B, 512)
         return encoded_image
 
     def forward(self, x: torch.Tensor):
@@ -84,7 +93,7 @@ class ImageEncoder(nn.Module):
             batched_encoded_image = self.encode_image(batched_x)  # (B * N, 512)
 
             # Chunk the encoded images back into the original batch size
-            chunked_encoded_images: tuple[torch.Tensor, ...] = batched_encoded_image.chunk(N, dim=0)  # N x (B, )
+            chunked_encoded_images: tuple[torch.Tensor, ...] = batched_encoded_image.chunk(N, dim=0)  # N x (B, 512)
             encoded_images = torch.stack(chunked_encoded_images, dim=1)  # (B, N, 512)
 
         else:
@@ -107,19 +116,74 @@ class ImageEncoder(nn.Module):
 
 
 class TextEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, merge_to_batch=True):
         super(TextEncoder, self).__init__()
-        self.text_feature_array = TextFeaturesArray(512, 16, 16, 512, 512, mode="baseline")
 
-    def forward(self, x: list[list[dict]], old_height=None, old_width=None):
-        return self.text_feature_array(x, old_height, old_width)
+        self.merge_to_batch = merge_to_batch
+
+        self.tokenizer = RobertaTokenizer.from_pretrained("pdelobelle/robbert-v2-dutch-base")
+        self.roberta = RobertaModel.from_pretrained("pdelobelle/robbert-v2-dutch-base", add_pooling_layer=False)
+
+        self.fc = nn.Sequential(
+            LazyLinearBlock(512),
+            nn.Linear(512, 512),
+        )
+
+    @property
+    @lru_cache
+    def device(self):
+        return next(self.parameters()).device
+
+    def encode_text(self, text: list[str]):
+        # Tokenize the text
+        encoded_text = self.tokenizer(text, padding=True, truncation=True, return_tensors="pt")  # (B, S)
+        encoded_text = {key: tensor.to(self.device) for key, tensor in encoded_text.items()}
+
+        # Encode the text
+
+        encoded_text = self.roberta(**encoded_text).last_hidden_state  # (B, S, 768)
+        encoded_text = encoded_text[:, 0]  # (B, 768)
+        encoded_text = self.fc(encoded_text)  # (B, 512)
+
+        return encoded_text
+
+    def forward(self, x: list[list[str]]):
+        N = len(x[0])  # Number of documents
+        if self.merge_to_batch:
+            # Flatten the input
+            batched_x: list[str] = [text for texts in x for text in texts]
+
+            # Encode the text
+            batched_encoded_texts: torch.Tensor = self.encode_text(batched_x)  # (B * N, 512)
+
+            # Chunk the encoded texts back into the original batch size
+            chunked_encoded_texts: tuple[torch.Tensor, ...] = batched_encoded_texts.chunk(N, dim=0)  # N x (B, 512)
+            encoded_texts: torch.Tensor = torch.stack(chunked_encoded_texts, dim=1)  # (B, N, 512)
+
+        else:
+            # Loop through the documents and encode them
+            encoded_texts_list = []
+            for i in range(N):
+                texts = [x[j][i] for j in range(len(x))]
+
+                # Encode the individual documents per batch
+                encoded_text = self.encode_text(texts)  # (B, 512)
+                encoded_texts_list.append(encoded_text)
+
+            # Recombine the encoded documents
+            encoded_texts: torch.Tensor = torch.stack(encoded_texts_list, dim=1)  # (B, N, 512)
+
+        # if torch.isnan(encoded_texts).any():
+        #     raise ValueError("NaN values in the encoded texts")
+
+        return encoded_texts
 
 
 class DocumentSeparator(ClassificationModel):
     def __init__(
         self,
         image_encoder=ImageEncoder(merge_to_batch=True),
-        text_encoder=TextEncoder(),
+        text_encoder=TextEncoder(merge_to_batch=True),
         output_size=2,
         dropout=0.5,
         label_smoothing=0.0,
@@ -128,78 +192,60 @@ class DocumentSeparator(ClassificationModel):
         super(DocumentSeparator, self).__init__(**kwargs)
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
-        self.output_size = output_size
-        self.dropout = dropout
-        self.label_smoothing = label_smoothing
-
-        self.conv2d = nn.Sequential(
-            nn.Conv2d(1024, 512, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1),
-        )
-        self.flatten = nn.Flatten(start_dim=2)
-        self.fc1 = nn.Sequential(
-            LazyLinearBlock(512, dropout=dropout),
-            nn.Linear(512, 512),
-        )
         self.lstm = nn.LSTM(
-            input_size=512,
-            hidden_size=256,
+            input_size=1024,
+            hidden_size=512,
             num_layers=2,
             batch_first=True,
             bidirectional=True,
             dropout=dropout,
         )
-        self.fc2 = nn.Sequential(
-            LazyLinearBlock(512, dropout=dropout),
+        self.fc = nn.Sequential(
+            LazyLinearBlock(1024, dropout=dropout),
+            LinearBlock(1024, 512, dropout=dropout),
             nn.Linear(512, output_size),
         )
-        self.cosine_embedding_loss = nn.CosineEmbeddingLoss()
-
         self.dropout = nn.Dropout(dropout)
         self.label_smoothing = label_smoothing
 
         self.accuracy = Accuracy(task="multiclass", num_classes=output_size)
 
-    def chunk_and_conv(self, x: torch.Tensor):
-        N = x.size(1)
-        chunked_x: tuple[torch.Tensor, ...] = x.chunk(N, dim=1)  # N x (B, 1, C, H, W)
-        batched_x: torch.Tensor = torch.concat(chunked_x, dim=0).squeeze(dim=1)  # (B * N, C, H, W)
-
-        # Encode each image
-        batched_encoded_image = self.conv2d(batched_x)  # (B * N, 128, H, W)
-
-        # Chunk the encoded images back into the original batch size
-        chunked_encoded_images: tuple[torch.Tensor, ...] = batched_encoded_image.chunk(N, dim=0)  # N x (B, 128, H, W)
-        encoded_images = torch.stack(chunked_encoded_images, dim=1)  # (B, N, 128, H, W)
-        return encoded_images
+    @property
+    @lru_cache
+    def device(self):
+        return next(self.parameters()).device
 
     def cosine_with_targets(self, x_tensor, y_tensor, x_target, y_target):
         target = torch.where(y_target == 1, torch.tensor(-1.0), torch.tensor(1.0)).to(self.device)
         return self.cosine_embedding_loss(x_tensor, y_tensor, target)
 
-    def forward(self, x: dict):
+    def forward(self, x):
         images = x["images"]
-        texts = x["texts"]
         shapes = x["shapes"]
-        max_shape = torch.amax(shapes, dim=(0, 1)).cpu().numpy()
+        texts = x["texts"]
+        for i in range(len(texts)):
+            for j in range(len(texts[i])):
+                texts[i][j] = combine_texts(x["text"] for x in texts[i][j].values())
 
-        encoded_images = self.image_encoder(images)
-        encoded_texts = self.text_encoder(texts, old_height=max_shape[0], old_width=max_shape[1])
+        images = images.to(self.device)
+        shapes = shapes.to(self.device)
 
-        encoded_features = torch.cat([encoded_images, encoded_texts], dim=-3)
+        images = self.image_encoder(images)
+        texts = self.text_encoder(texts)
 
-        encoded_features = self.chunk_and_conv(encoded_features)
-        encoded_features = self.flatten(encoded_features)
-        encoded_features = self.fc1(encoded_features)
+        if torch.logical_xor(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0).any():
+            raise ValueError("One of the shapes is 0, both should be 0 (no image) or both should be non-zero (normal image)")
+        both_zero = torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0)
+        inverted_shapes = 1 / shapes
+        inverted_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), inverted_shapes)
+        ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
+        ratio_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), ratio_shapes)
 
-        output, _ = self.lstm(encoded_features)
-
+        encoded_features = torch.cat([images, texts], dim=2)  # (B, N, 1027)
+        output = self.dropout(encoded_features)
+        output, _ = self.lstm(output)  # (B, N, 1024)
+        output = self.fc(output)
         output_center = output[:, output.shape[1] // 2]
-
-        output_center = self.fc2(output_center)
 
         if "targets" in x:
             targets = x["targets"]
@@ -212,11 +258,11 @@ class DocumentSeparator(ClassificationModel):
                     encoded_features[:, i], encoded_features[:, i + 1], targets[:, i], targets[:, i + 1]
                 )
                 cosine_loss_total += cosine_loss
-
             losses = {
                 "cross_entropy_loss": cross_entropy_loss,
                 "cosine_loss": cosine_loss_total,
             }
+
             acc = self.accuracy(output_center, targets_center)
             metrics = {
                 "acc": acc,
@@ -227,7 +273,6 @@ class DocumentSeparator(ClassificationModel):
 
 
 if __name__ == "__main__":
-
     # Test ImageEncoder
     image_encoder = ImageEncoder()
     x = torch.randn(1, 3, 3, 512, 512)
