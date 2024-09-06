@@ -88,7 +88,7 @@ class RulesBased:
             # center_image = (images[i, center_index] * 255).numpy().astype(np.uint8)
             # prev_image = (images[i, center_index - 1] * 255).numpy().astype(np.uint8)
 
-            if self.get_size_match(prev_shape, center_shape, 0.1):
+            if self.get_size_match(prev_shape, center_shape, 0.05):
                 predictions[i, 0] = 1
             else:
                 predictions[i, 1] = 1

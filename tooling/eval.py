@@ -13,7 +13,7 @@ from data.augmentations import PadToMaxSize, SmartCompose
 from data.convert_xlsx import link_with_paths
 from data.dataloader import collate_fn
 from data.dataset import DocumentSeparationDataset
-from models.model2 import DocumentSeparator, ImageEncoder, TextEncoder
+from models.model1 import DocumentSeparator, ImageEncoder, TextEncoder
 from models.rules_based import RulesBased
 from utils.input_utils import get_file_paths, supported_image_formats
 
@@ -64,8 +64,12 @@ def main(args: argparse.Namespace):
     )
 
     def get_middle_scan(y):
-        i = y.shape[1] // 2
-        return y[:, i]
+        return y[:, y.shape[1] // 2]
+
+    def split_input(batch):
+        y = batch["targets"]
+        del batch["targets"]
+        return batch, y
 
     if args.checkpoint:
         model = DocumentSeparator.load_from_checkpoint(args.checkpoint)
@@ -77,11 +81,10 @@ def main(args: argparse.Namespace):
     confusion_matrix_model = ConfusionMatrix(task="multiclass", num_classes=2).to(model.device)
     confusion_matrix_rules = ConfusionMatrix(task="multiclass", num_classes=2).to(model.device)
     for batch in tqdm(val_dataloader):
-        x, y = model.split_input(batch)
+        x, y = split_input(batch)
         y = get_middle_scan(y)
 
-        y_hat_model = model(x)
-        y_hat_model = get_middle_scan(y_hat_model)
+        y_hat_model, _, _ = model(x)
         y_hat_model = torch.argmax(y_hat_model, dim=1)
         confusion_matrix_model.update(y_hat_model, y.to(model.device))
 

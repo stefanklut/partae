@@ -1,5 +1,6 @@
 import argparse
 import itertools
+import json
 from pathlib import Path
 
 import numpy as np
@@ -13,7 +14,7 @@ from data.augmentations import PadToMaxSize, SmartCompose
 
 # from data.dataloader import collate_fn
 from data.dataset import DocumentSeparationDataset
-from models.model4 import DocumentSeparator, ImageEncoder, TextEncoder
+from models.model1 import DocumentSeparator, ImageEncoder, TextEncoder
 from utils.input_utils import get_file_paths, supported_image_formats
 
 torch.set_float32_matmul_precision("high")
@@ -145,6 +146,7 @@ class SavePredictor(Predictor):
             collate_fn=collate_fn,
         )
 
+        json_data = []
         for data in tqdm(dataloader, desc="Processing"):
             result = self(data)
 
@@ -152,11 +154,16 @@ class SavePredictor(Predictor):
             middle_scan = result
             middle_path = self.get_middle_path(data["image_paths"])
             # Save the result
-            name = middle_path.stem
 
-            output_path = self.output_dir / f"{name}.txt"
-            with open(output_path, "w") as file:
-                file.write(str(middle_scan.item()))
+            result = {
+                str(middle_path): result,
+            }
+            json_data.append(result)
+
+        json_data = {k: v.tolist() for d in json_data for k, v in d.items()}
+        output_path = self.output_dir.joinpath("results.json")
+        with open(output_path, "w") as f:
+            json.dump(json_data, f)
 
 
 def main(args):
