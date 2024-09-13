@@ -234,22 +234,14 @@ class DocumentSeparator(ClassificationModel):
         images = self.image_encoder(images)
         texts = self.text_encoder(texts)
 
-        if torch.logical_xor(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0).any():
-            raise ValueError("One of the shapes is 0, both should be 0 (no image) or both should be non-zero (normal image)")
-        both_zero = torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0)
-        inverted_shapes = 1 / shapes
-        inverted_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), inverted_shapes)
-        ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
-        ratio_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), ratio_shapes)
-
-        encoded_features = torch.cat([images, texts], dim=2)  # (B, N, 1027)
+        encoded_features = torch.cat([images, texts], dim=2)  # (B, N, 1024)
         output = self.dropout(encoded_features)
         output, _ = self.lstm(output)  # (B, N, 1024)
         output = self.fc(output)
         output_center = output[:, output.shape[1] // 2]
 
         if "targets" in x:
-            targets = x["targets"]
+            targets = x["targets"]["start"]
             targets_center = targets[:, targets.shape[1] // 2]
             cross_entropy_loss = F.cross_entropy(output_center, targets_center, label_smoothing=self.label_smoothing)
             cosine_loss_total = 0

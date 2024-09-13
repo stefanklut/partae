@@ -238,7 +238,7 @@ class DocumentSeparator(ClassificationModel):
         output_center = self.fc(output_center)
 
         if "targets" in x:
-            targets = x["targets"]
+            targets = x["targets"]["start"]
             targets_center = targets[:, targets.shape[1] // 2]
             loss = F.cross_entropy(output_center, targets_center, label_smoothing=self.label_smoothing)
             losses = {"loss": loss}

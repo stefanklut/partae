@@ -1,4 +1,4 @@
-# Original idea with loss on all scans, not just the one in the middle
+# Cosine similarity between scans from the same document should be high, add extra conv to image encoder and larger image size
 from functools import lru_cache
 
 import numpy as np
@@ -46,7 +46,7 @@ class LinearBlock(nn.Module):
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, merge_to_batch=True, resize_size=(224, 224)):
+    def __init__(self, merge_to_batch=True, resize_size=(512, 512)):
         super(ImageEncoder, self).__init__()
 
         self.merge_to_batch = merge_to_batch
@@ -54,6 +54,12 @@ class ImageEncoder(nn.Module):
 
         imagenet = torchvision.models.resnet34(weights=ResNet34_Weights.DEFAULT)
         self.imagenet = nn.Sequential(*list(imagenet.children())[:-2])
+        self.conv2d = nn.Sequential(
+            nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+        )
         self.flatten = nn.Flatten(1, -1)
         self.fc = nn.Sequential(
             LazyLinearBlock(2048),
@@ -189,25 +195,43 @@ class DocumentSeparator(ClassificationModel):
         self.lstm = nn.LSTM(
             input_size=1027,
             hidden_size=512,
-            num_layers=1,
+            num_layers=2,
             batch_first=True,
             bidirectional=True,
             dropout=dropout,
         )
-        self.fc = nn.Sequential(
+        self.fc_start = nn.Sequential(
             LazyLinearBlock(1024, dropout=dropout),
             LinearBlock(1024, 512, dropout=dropout),
             nn.Linear(512, output_size),
         )
+
+        self.fc_end = nn.Sequential(
+            LazyLinearBlock(1024, dropout=dropout),
+            LinearBlock(1024, 512, dropout=dropout),
+            nn.Linear(512, output_size),
+        )
+
+        self.fc_middle = nn.Sequential(
+            LazyLinearBlock(1024, dropout=dropout),
+            LinearBlock(1024, 512, dropout=dropout),
+            nn.Linear(512, output_size),
+        )
+
         self.dropout = nn.Dropout(dropout)
         self.label_smoothing = label_smoothing
 
         self.accuracy = Accuracy(task="multiclass", num_classes=output_size)
+        self.cosine_embedding_loss = nn.CosineEmbeddingLoss()
 
     @property
     @lru_cache
     def device(self):
         return next(self.parameters()).device
+
+    def cosine_with_targets(self, x_tensor, y_tensor, x_target, y_target):
+        target = torch.where(y_target == 1, torch.tensor(-1.0), torch.tensor(1.0)).to(self.device)
+        return self.cosine_embedding_loss(x_tensor, y_tensor, target)
 
     def forward(self, x):
         images = x["images"]
@@ -231,22 +255,61 @@ class DocumentSeparator(ClassificationModel):
         ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
         ratio_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), ratio_shapes)
 
-        output = torch.cat([images, texts, inverted_shapes, ratio_shapes], dim=2)  # (B, N, 1027)
-        output = self.dropout(output)
+        encoded_features = torch.cat([images, texts, ratio_shapes, inverted_shapes], dim=2)  # (B, N, 1027)
+        output = self.dropout(encoded_features)
         output, _ = self.lstm(output)  # (B, N, 1024)
-        output = self.fc(output)
-        output_center = output[:, output.shape[1] // 2]
+        output_start = self.fc_start(output)
+        output_start_center = output_start[:, output_start.shape[1] // 2]
+        output_end = self.fc_end(output)
+        output_end_center = output_end[:, output_end.shape[1] // 2]
+        output_middle = self.fc_middle(output)
+        output_middle_center = output_middle[:, output_middle.shape[1] // 2]
 
         if "targets" in x:
-            targets = x["targets"]["start"]
-            loss = F.cross_entropy(output.view(-1, 2), targets.view(-1), label_smoothing=self.label_smoothing)
-            losses = {"loss": loss}
-            targets_center = targets[:, targets.shape[1] // 2]
-            acc = self.accuracy(output_center, targets_center)
-            metrics = {"acc": acc}
-            return output_center, losses, metrics
+            targets_start = x["targets"]["start"]
+            targets_start_center = targets_start[:, targets_start.shape[1] // 2]
+            targets_end = x["targets"]["end"]
+            targets_end_center = targets_end[:, targets_end.shape[1] // 2]
+            targets_middle = x["targets"]["middle"]
+            targets_middle_center = targets_middle[:, targets_middle.shape[1] // 2]
 
-        return output_center, None, None
+            cross_entropy_start_loss = F.cross_entropy(
+                output_start_center, targets_start_center, label_smoothing=self.label_smoothing
+            )
+            cross_entropy_end_loss = F.cross_entropy(
+                output_end_center, targets_end_center, label_smoothing=self.label_smoothing
+            )
+            cross_entropy_middle_loss = F.cross_entropy(
+                output_middle_center, targets_middle_center, label_smoothing=self.label_smoothing
+            )
+
+            cosine_loss_total = 0
+            assert encoded_features.shape[1] > 1, "Number of documents must be greater than 1 for cosine loss"
+            for i in range(encoded_features.shape[1] - 1):
+                cosine_loss = self.cosine_with_targets(
+                    encoded_features[:, i], encoded_features[:, i + 1], targets_start[:, i], targets_start[:, i + 1]
+                )
+                cosine_loss_total += cosine_loss
+            losses = {
+                "cross_entropy_start_loss": cross_entropy_start_loss,
+                "cross_entropy_end_loss": cross_entropy_end_loss,
+                "cross_entropy_middle_loss": cross_entropy_middle_loss,
+                "cosine_loss": cosine_loss_total,
+            }
+
+            acc = self.accuracy(output_start_center, targets_start_center)
+            acc_start = acc
+            acc_end = self.accuracy(output_end_center, targets_end_center)
+            acc_middle = self.accuracy(output_middle_center, targets_middle_center)
+            metrics = {
+                "acc": acc,
+                "acc_start": acc_start,
+                "acc_end": acc_end,
+                "acc_middle": acc_middle,
+            }
+            return output_start_center, losses, metrics
+
+        return output_start_center, None, None
 
 
 if __name__ == "__main__":

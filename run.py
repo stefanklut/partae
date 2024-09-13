@@ -43,10 +43,15 @@ class Predictor:
         self.model = DocumentSeparator.load_from_checkpoint(checkpoint)
         self.model.eval()
 
-    def __call__(self, data: dict) -> torch.Tensor:
+    def __call__(self, data: dict) -> dict:
         result_logits, _, _ = self.model(data)
-        result = torch.argmax(result_logits, dim=1)
-        return result
+        result_logits = torch.nn.functional.softmax(result_logits, dim=1)
+        confidence, label = torch.max(result_logits, dim=1)
+        output = {
+            "label": label,
+            "confidence": confidence,
+        }
+        return output
 
 
 def collate_fn(batch):
@@ -146,24 +151,38 @@ class SavePredictor(Predictor):
             collate_fn=collate_fn,
         )
 
+        def save_json(json_data, inventory_name):
+            json_data = {k: v for d in json_data for k, v in d.items()}
+            output_path = self.output_dir.joinpath(inventory_name, "results.json")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            print(f"Saving results to {output_path}")
+            with open(output_path, "w") as f:
+                json.dump(json_data, f)
+
         json_data = []
+        previous_inventory = None
         for data in tqdm(dataloader, desc="Processing"):
             result = self(data)
 
-            result = result.cpu().numpy()
-            middle_scan = result
             middle_path = self.get_middle_path(data["image_paths"])
+            inventory = middle_path.parent
+            if inventory != previous_inventory:
+                if previous_inventory is not None:
+                    inventory_name = previous_inventory.name
+                    save_json(json_data, inventory_name)
+                previous_inventory = inventory
+                json_data = []
             # Save the result
 
             result = {
-                str(middle_path): result,
+                str(middle_path): {
+                    "result": result["label"].cpu().item(),
+                    "confidence": result["confidence"].cpu().item(),
+                }
             }
             json_data.append(result)
 
-        json_data = {k: v.tolist() for d in json_data for k, v in d.items()}
-        output_path = self.output_dir.joinpath("results.json")
-        with open(output_path, "w") as f:
-            json.dump(json_data, f)
+        save_json(json_data, inventory)
 
 
 def main(args):

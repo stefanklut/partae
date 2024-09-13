@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import numpy as np
 import torch
 
@@ -6,14 +8,16 @@ def collate_fn(batch):
     _images = []
     shapes = []
     texts = []
-    targets = []
+    targets = defaultdict(list)
     image_paths = []
     idcs = []
     for item in batch:
         _images.append(item["images"])
         shapes.append(item["shapes"])
         texts.append(item["texts"])
-        targets.append(item["targets"])
+        for key, value in item["targets"].items():
+            targets[key].append(value)
+
         image_paths.append(item["image_paths"])
         idcs.append(item["idcs"])
 
@@ -30,9 +34,10 @@ def collate_fn(batch):
                 value=0,
             )
         images.append(torch.stack(_images[i]))
+
     images = torch.stack(images)
     shapes = torch.tensor(shapes)
-    targets = torch.tensor(targets)
+    targets = {key: torch.tensor(value) for key, value in targets.items()}
     idcs = torch.tensor(idcs)
 
     return {"images": images, "shapes": shapes, "texts": texts, "targets": targets, "image_paths": image_paths, "idcs": idcs}
