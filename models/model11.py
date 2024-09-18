@@ -1,4 +1,4 @@
-# Cosine similarity between scans from the same document should be high, add extra conv to image encoder and larger image size
+# Cosine similarity between scans from the same document should be high, add extra conv to image encoder and larger image size, predict start, end and middle of the document
 from functools import lru_cache
 
 import numpy as np

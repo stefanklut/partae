@@ -1,4 +1,5 @@
-# Cosine similarity between scans from the same document should be high, add extra conv to image encoder and larger image size, predict start, end and middle of the document, BCE loss
+# Cosine similarity between scans from the same document should be high, add extra conv to image encoder and larger image size, predict start, end and middle of the document,
+# BCE loss, no inverted shape, do not use LSTM, but compare directly
 from functools import lru_cache
 
 import numpy as np
@@ -193,7 +194,7 @@ class DocumentSeparator(ClassificationModel):
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
         self.lstm = nn.LSTM(
-            input_size=1027,
+            input_size=512,
             hidden_size=512,
             num_layers=2,
             batch_first=True,
@@ -217,6 +218,14 @@ class DocumentSeparator(ClassificationModel):
             LinearBlock(1024, 512, dropout=dropout),
             nn.Linear(512, output_size),
         )
+
+        self.fc_encoded_features = nn.Sequential(
+            nn.Linear(1027, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
+        )
+
+        self.flatten = nn.Flatten(1, -1)
 
         self.dropout = nn.Dropout(dropout)
         self.label_smoothing = label_smoothing
@@ -249,21 +258,17 @@ class DocumentSeparator(ClassificationModel):
 
         if torch.logical_xor(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0).any():
             raise ValueError("One of the shapes is 0, both should be 0 (no image) or both should be non-zero (normal image)")
-        both_zero = torch.logical_and(shapes[..., 0:1] == 0, shapes[..., 1:2] == 0)
-        inverted_shapes = 1 / shapes
-        inverted_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), inverted_shapes)
+        divided_shapes = shapes / 1000
         ratio_shapes = shapes[..., 0:1] / shapes[..., 1:2]
-        ratio_shapes = torch.where(both_zero, torch.tensor(0, device=both_zero.device), ratio_shapes)
+        ratio_shapes = torch.where(shapes[..., 1:2] == 0, torch.tensor(0, device=shapes.device), ratio_shapes)
 
-        encoded_features = torch.cat([images, texts, ratio_shapes, inverted_shapes], dim=2)  # (B, N, 1027)
-        output = self.dropout(encoded_features)
-        output, _ = self.lstm(output)  # (B, N, 1024)
-        output_start = self.fc_start(output)
-        output_start_center = output_start[:, output_start.shape[1] // 2].squeeze(dim=1)
-        output_end = self.fc_end(output)
-        output_end_center = output_end[:, output_end.shape[1] // 2].squeeze(dim=1)
-        output_middle = self.fc_middle(output)
-        output_middle_center = output_middle[:, output_middle.shape[1] // 2].squeeze(dim=1)
+        encoded_features = torch.cat([images, texts, ratio_shapes, divided_shapes], dim=2)  # (B, N, 1027)
+        encoded_features = self.fc_encoded_features(encoded_features)
+
+        output = self.flatten(encoded_features)
+        output_start_center = self.fc_start(output).squeeze(dim=1)
+        output_end_center = self.fc_end(output).squeeze(dim=1)
+        output_middle_center = self.fc_middle(output).squeeze(dim=1)
 
         if "targets" in x:
             targets_start = x["targets"]["start"]
@@ -284,11 +289,13 @@ class DocumentSeparator(ClassificationModel):
                     encoded_features[:, i], encoded_features[:, i + 1], targets_start[:, i], targets_start[:, i + 1]
                 )
                 cosine_loss_total += cosine_loss
+            cosine_loss_total /= encoded_features.shape[1] - 1
+
             losses = {
                 "cross_entropy_start_loss": cross_entropy_start_loss,
                 "cross_entropy_end_loss": cross_entropy_end_loss,
                 "cross_entropy_middle_loss": cross_entropy_middle_loss,
-                "cosine_loss": cosine_loss_total,
+                "cosine_loss": cosine_loss_total * 10,
             }
 
             acc = self.accuracy(output_start_center, targets_start_center)
