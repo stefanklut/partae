@@ -14,7 +14,7 @@ from data.augmentations import PadToMaxSize, SmartCompose
 
 # from data.dataloader import collate_fn
 from data.dataset import DocumentSeparationDataset
-from models.model1 import DocumentSeparator, ImageEncoder, TextEncoder
+from models.model12 import DocumentSeparator, ImageEncoder, TextEncoder
 from utils.input_utils import get_file_paths, supported_image_formats
 
 torch.set_float32_matmul_precision("high")
@@ -27,6 +27,8 @@ def get_arguments() -> argparse.Namespace:
     io_args.add_argument("-i", "--input", help="Input folder/files", nargs="+", action="extend", type=str, required=True)
     io_args.add_argument("-o", "--output", help="Output folder", type=str, required=True)
     io_args.add_argument("-c", "--checkpoint", help="Path to the checkpoint", type=str, default=None)
+
+    io_args.add_argument("--override", help="Override existing results", action="store_true")
 
     args = parser.parse_args()
     return args
@@ -45,8 +47,10 @@ class Predictor:
 
     def __call__(self, data: dict) -> dict:
         result_logits, _, _ = self.model(data)
-        result_logits = torch.nn.functional.softmax(result_logits, dim=1)
-        confidence, label = torch.max(result_logits, dim=1)
+        # result_logits = torch.nn.functional.softmax(result_logits, dim=1)
+        result_logits = torch.nn.functional.sigmoid(result_logits)
+        confidence = torch.where(result_logits > 0.5, result_logits, 1 - result_logits)
+        label = (result_logits > 0.5).to(torch.int64)
         output = {
             "label": label,
             "confidence": confidence,
@@ -91,14 +95,17 @@ class SavePredictor(Predictor):
         input_paths: list[Path],
         output_path: Path,
         checkpoint: str,
+        override: bool = False,
     ) -> None:
         super().__init__(checkpoint)
         self.input_paths = None
-        if input_paths is not None:
-            self.set_input_paths(input_paths)
-
+        self.output_dir = None
+        self.override = override
         if output_path is not None:
             self.set_output_path(output_path)
+
+        if input_paths is not None:
+            self.set_input_paths(input_paths)
 
         self.transform = SmartCompose(
             [
@@ -108,13 +115,26 @@ class SavePredictor(Predictor):
             ]
         )
 
-    def set_input_paths(self, input_paths: list[Path]) -> None:
-        paths = get_file_paths(input_paths, formats=supported_image_formats)
+    def results_exist(self, path: Path) -> bool:
+        if self.output_dir is None:
+            raise ValueError("Output path not set")
+        if self.output_dir.joinpath(path.name, "results.json").exists():
+            print(f"Results exist {self.output_dir.joinpath(path.name, 'results.json')}. Skipping inventory {path.name}")
+            return True
+        return False
 
-        input_paths = natsorted(paths)
-        # Group the paths by parent folder
-        grouped_paths = [list(group) for _, group in itertools.groupby(input_paths, key=lambda x: x.parent)]
-        grouped_paths = [[group] for group in grouped_paths]
+    def set_input_paths(self, input_paths: list[Path]) -> None:
+        input_paths = natsorted([Path(input_path) for input_path in input_paths])
+        assert all([path.is_dir() for path in input_paths]), "All input paths must be directories"
+        assert len(set(input_path.name for input_path in input_paths)) == len(
+            input_paths
+        ), "All input paths must have a unique name"
+
+        grouped_paths = [
+            [get_file_paths(input_path, formats=supported_image_formats)]
+            for input_path in tqdm(input_paths, desc="Getting file paths for each inventory")
+            if self.override or not self.results_exist(input_path)
+        ]
 
         self.input_paths = grouped_paths
 
@@ -136,6 +156,8 @@ class SavePredictor(Predictor):
     def process(self):
         if self.input_paths is None:
             raise TypeError("No input paths provided")
+        if self.output_dir is None:
+            raise ValueError("Output path not set")
 
         dataset = DocumentSeparationDataset(
             image_paths=self.input_paths,
@@ -147,29 +169,32 @@ class SavePredictor(Predictor):
         dataloader = torch.utils.data.DataLoader(
             dataset,
             batch_size=1,
-            num_workers=4,
+            num_workers=32,
             collate_fn=collate_fn,
         )
 
-        def save_json(json_data, inventory_name):
+        def save_json(json_data, output_path):
             json_data = {k: v for d in json_data for k, v in d.items()}
-            output_path = self.output_dir.joinpath(inventory_name, "results.json")
             output_path.parent.mkdir(parents=True, exist_ok=True)
             print(f"Saving results to {output_path}")
             with open(output_path, "w") as f:
                 json.dump(json_data, f)
 
         json_data = []
+        inventory = None
         previous_inventory = None
         for data in tqdm(dataloader, desc="Processing"):
             result = self(data)
 
             middle_path = self.get_middle_path(data["image_paths"])
             inventory = middle_path.parent
+
+            output_path = self.output_dir.joinpath(inventory.name, "results.json")
             if inventory != previous_inventory:
                 if previous_inventory is not None:
                     inventory_name = previous_inventory.name
-                    save_json(json_data, inventory_name)
+                    output_path = self.output_dir.joinpath(inventory_name, "results.json")
+                    save_json(json_data, output_path)
                 previous_inventory = inventory
                 json_data = []
             # Save the result
@@ -181,12 +206,13 @@ class SavePredictor(Predictor):
                 }
             }
             json_data.append(result)
-
-        save_json(json_data, inventory)
+        if inventory is not None:
+            output_path = self.output_dir.joinpath(inventory.name, "results.json")
+            save_json(json_data, output_path)
 
 
 def main(args):
-    predictor = SavePredictor(args.input, args.output, args.checkpoint)
+    predictor = SavePredictor(args.input, args.output, args.checkpoint, args.override)
     predictor.process()
 
 

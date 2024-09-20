@@ -1,6 +1,7 @@
 import functools
 import sys
 from collections import defaultdict
+from multiprocessing import Pool
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -9,6 +10,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+from tqdm import tqdm
 
 sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))
 from data.augmentations import SmartCompose
@@ -28,6 +30,7 @@ class DocumentSeparationDataset(Dataset):
         sample_same_inventory=True,
         wrap_round=False,
         transform=None,
+        check_files=False,
     ):
         self.image_paths = image_paths
         assert mode in ["train", "val", "test"], "Mode must be one of 'train', 'val', 'test'"
@@ -37,15 +40,20 @@ class DocumentSeparationDataset(Dataset):
         self.doc_lengths = defaultdict(list)
         self.inventory_lengths = []
 
-        for i, inventory_i in enumerate(image_paths):
-            for j, doc_j in enumerate(inventory_i):
-                if len(doc_j) < 1:
-                    raise ValueError(f"Document {i} in inventory {inventory_i} has no images")
-                for k, path_i in enumerate(doc_j):
-                    check_path_accessible(path_i)
-                    xml_path_i = image_path_to_xml_path(path_i)
-                    self.idx_to_idcs[idx] = (i, j, k)
-                    idx += 1
+        total_scans = sum(sum(len(doc) for doc in inventory) for inventory in image_paths)
+        with tqdm(total=total_scans, desc="Checking files") as pbar:
+            idx = 0
+            for i, inventory_i in enumerate(image_paths):
+                for j, doc_j in enumerate(inventory_i):
+                    if len(doc_j) < 1:
+                        raise ValueError(f"Document {i} in inventory {inventory_i} has no images")
+                    for k, path_i in enumerate(doc_j):
+                        if check_files:
+                            check_path_accessible(path_i)
+                            xml_path_i = image_path_to_xml_path(path_i)
+                        self.idx_to_idcs[idx] = (i, j, k)
+                        idx += 1
+                        pbar.update()
 
         self.len = idx
 

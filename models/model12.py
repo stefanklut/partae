@@ -260,12 +260,13 @@ class DocumentSeparator(ClassificationModel):
         output, _ = self.lstm(output)  # (B, N, 1024)
         output_start = self.fc_start(output)
         output_start_center = output_start[:, output_start.shape[1] // 2].squeeze(dim=1)
-        output_end = self.fc_end(output)
-        output_end_center = output_end[:, output_end.shape[1] // 2].squeeze(dim=1)
-        output_middle = self.fc_middle(output)
-        output_middle_center = output_middle[:, output_middle.shape[1] // 2].squeeze(dim=1)
 
         if "targets" in x:
+            output_end = self.fc_end(output)
+            output_end_center = output_end[:, output_end.shape[1] // 2].squeeze(dim=1)
+            output_middle = self.fc_middle(output)
+            output_middle_center = output_middle[:, output_middle.shape[1] // 2].squeeze(dim=1)
+
             targets_start = x["targets"]["start"]
             targets_start_center = targets_start[:, targets_start.shape[1] // 2]
             targets_end = x["targets"]["end"]
