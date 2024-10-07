@@ -96,13 +96,23 @@ class DocumentSeparationDataset(Dataset):
 
     @functools.lru_cache(maxsize=16)
     def get_image(self, inventory, document, scan):
-        image_path = self.image_paths[inventory][document][scan].resolve()
+        image_path: Path = self.image_paths[inventory][document][scan]
+
+        # Check if thumbnail exists
+        thumbnail_path = Path("/data/thumbnails/").joinpath(str(image_path.relative_to(Path("/"))) + ".thumbnail.jpg")
         try:
-            image = Image.open(image_path)
+            image = Image.open(thumbnail_path)
             image.load()
+            image = image.convert("RGB")
         except OSError as e:
-            print(f"Could not open image {image_path}")
-            return None
+            print(f"Could not open thumbnail {thumbnail_path}. Trying to open original image")
+            try:
+                image = Image.open(image_path.resolve())
+                image.load()
+                image = image.convert("RGB")
+            except OSError as e:
+                print(f"Could not open image {image_path}")
+                return None
         return image
 
     @functools.lru_cache(maxsize=16)
@@ -110,7 +120,8 @@ class DocumentSeparationDataset(Dataset):
         xml_path = image_path_to_xml_path(self.image_paths[inventory][document][scan])
         page_data = PageData.from_file(xml_path)
         text = page_data.get_transcription_dict()
-        return text
+        shape = page_data.get_size()
+        return text, shape
 
     def out_of_bounds(self, inventory, document, scan):
         return (
@@ -284,25 +295,25 @@ class DocumentSeparationDataset(Dataset):
             else:
                 image = self.get_image(inventory, document, scan)
                 if image is None:
-                    shape = (0, 0)
-                    text = self.get_text(inventory, document, scan)
+                    image_path = self.image_paths[inventory][document][scan]
+                    text, shape = self.get_text(inventory, document, scan)
                     if self.mode in ["train", "val"]:
                         target = {
                             "start": self.target["start"][inventory][document][scan],
                             "end": self.target["end"][inventory][document][scan],
                             "middle": self.target["middle"][inventory][document][scan],
                         }
-                    image_path = self.image_paths[inventory][document][scan]
                 else:
-                    shape = image.size[1], image.size[0]  # H, W
-                    text = self.get_text(inventory, document, scan)
+                    image_path = self.image_paths[inventory][document][scan]
+
+                    text, shape = self.get_text(inventory, document, scan)
+
                     if self.mode in ["train", "val"]:
                         target = {
                             "start": self.target["start"][inventory][document][scan],
                             "end": self.target["end"][inventory][document][scan],
                             "middle": self.target["middle"][inventory][document][scan],
                         }
-                    image_path = self.image_paths[inventory][document][scan]
 
             image_paths.append(image_path)
             _images.append(image)

@@ -20,8 +20,8 @@ class _ApplyToList(torch.nn.Module):
     def forward(self, tensor_list: list[Optional[torch.Tensor]]) -> list[Optional[torch.Tensor]]:
         if not isinstance(tensor_list, list):
             return self.fn(tensor_list)
-        if all(tensor is None for tensor in tensor_list):
-            raise ValueError("All tensors are None")
+        # if all(tensor is None for tensor in tensor_list):
+        #     raise ValueError("All tensors are None")
         for i in range(len(tensor_list)):
             if tensor_list[i] is None:
                 continue
@@ -53,6 +53,8 @@ class PadToMaxSize(_ApplyToList):
         return image_list
 
     def tensor_pad(self, tensor_list: list[Optional[torch.Tensor]]) -> list[Optional[torch.Tensor]]:
+        if all(tensor is None for tensor in tensor_list):
+            return tensor_list
         height, width = np.max([image.size()[-2:] for image in tensor_list if image is not None], axis=0)
         for i in range(len(tensor_list)):
             if tensor_list[i] is None:
@@ -68,8 +70,8 @@ class PadToMaxSize(_ApplyToList):
         return tensor_list
 
     def use_pil(self, tensor_list: list[Optional[torch.Tensor]]) -> bool:
-        if all(tensor is None for tensor in tensor_list):
-            raise ValueError("All tensors are None")
+        # if all(tensor is None for tensor in tensor_list):
+        #     raise ValueError("All tensors are None")
 
         for tensor in tensor_list:
             if tensor is not None:

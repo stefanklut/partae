@@ -46,7 +46,8 @@ class Predictor:
         self.model.eval()
 
     def __call__(self, data: dict) -> dict:
-        result_logits, _, _ = self.model(data)
+        with torch.no_grad():
+            result_logits, _, _ = self.model(data)
         # result_logits = torch.nn.functional.softmax(result_logits, dim=1)
         result_logits = torch.nn.functional.sigmoid(result_logits)
         confidence = torch.where(result_logits > 0.5, result_logits, 1 - result_logits)
@@ -65,20 +66,27 @@ def collate_fn(batch):
     image_paths = [item["image_paths"] for item in batch]
 
     # Pad to the same size
-    max_shape = np.max([image.size()[-2:] for sub_images in _images for image in sub_images if image is not None], axis=0)
-    images = []
-    for i in range(len(_images)):
-        for j in range(len(_images[i])):
-            if _images[i][j] is None:
-                _images[i][j] = torch.zeros((3, max_shape[0], max_shape[1]))
-            _images[i][j] = torch.nn.functional.pad(
-                _images[i][j],
-                (0, int(max_shape[1] - _images[i][j].size()[-1]), 0, int(max_shape[0] - _images[i][j].size()[-2])),
-                value=0,
-            )
-        images.append(torch.stack(_images[i]))
 
-    images = torch.stack(images)
+    if all(image is None for sub_images in _images for image in sub_images):
+        # keep shape
+        batch_size = len(batch)
+        images_size = len(_images[0])
+        images = torch.zeros((batch_size, images_size, 3, 1, 1))
+    else:
+        max_shape = np.max([image.size()[-2:] for sub_images in _images for image in sub_images if image is not None], axis=0)
+        images = []
+        for i in range(len(_images)):
+            for j in range(len(_images[i])):
+                if _images[i][j] is None:
+                    _images[i][j] = torch.zeros((3, max_shape[0], max_shape[1]))
+                _images[i][j] = torch.nn.functional.pad(
+                    _images[i][j],
+                    (0, int(max_shape[1] - _images[i][j].size()[-1]), 0, int(max_shape[0] - _images[i][j].size()[-2])),
+                    value=0,
+                )
+            images.append(torch.stack(_images[i]))
+
+        images = torch.stack(images)
     shapes = torch.tensor(shapes)
 
     return {
@@ -111,7 +119,7 @@ class SavePredictor(Predictor):
             [
                 ToTensor(),
                 PadToMaxSize(),
-                Resize((224, 224)),
+                Resize((512, 512)),
             ]
         )
 
@@ -125,14 +133,26 @@ class SavePredictor(Predictor):
 
     def set_input_paths(self, input_paths: list[Path]) -> None:
         input_paths = natsorted([Path(input_path) for input_path in input_paths])
-        assert all([path.is_dir() for path in input_paths]), "All input paths must be directories"
-        assert len(set(input_path.name for input_path in input_paths)) == len(
-            input_paths
+        all_input_paths = []
+        for path in input_paths:
+            if path.is_file() and path.suffix == ".txt":
+                with open(path, "r") as f:
+                    _input_paths = [Path(line.strip()) for line in f.readlines()]
+                for _input_path in _input_paths:
+                    if not _input_path.is_dir():
+                        raise FileNotFoundError(f"Could not find {_input_path}")
+                all_input_paths.extend(natsorted(_input_paths))
+            elif path.is_dir():
+                all_input_paths.append(path)
+            else:
+                raise ValueError(f"Input path {path} is not a file or directory")
+        assert len(set(input_path.name for input_path in all_input_paths)) == len(
+            all_input_paths
         ), "All input paths must have a unique name"
 
         grouped_paths = [
             [get_file_paths(input_path, formats=supported_image_formats)]
-            for input_path in tqdm(input_paths, desc="Getting file paths for each inventory")
+            for input_path in tqdm(all_input_paths, desc="Getting file paths for each inventory")
             if self.override or not self.results_exist(input_path)
         ]
 
@@ -162,14 +182,14 @@ class SavePredictor(Predictor):
         dataset = DocumentSeparationDataset(
             image_paths=self.input_paths,
             mode="test",
-            transform=None,
+            transform=self.transform,
             number_of_images=3,
         )
 
         dataloader = torch.utils.data.DataLoader(
             dataset,
             batch_size=1,
-            num_workers=32,
+            num_workers=16,
             collate_fn=collate_fn,
         )
 
