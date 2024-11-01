@@ -11,7 +11,7 @@ from torchvision.transforms import Resize, ToTensor
 
 from core.callbacks import NamedBackboneFinetuning
 from data.augmentations import PadToMaxSize, SmartCompose
-from data.datamodule import DocumentSeparationModule
+from data.datamodule import DocumentSeparationModuleJSON, DocumentSeparationModuleXLSX
 from models.model14 import DocumentSeparator
 from utils.input_utils import get_file_paths, supported_image_formats
 
@@ -40,6 +40,7 @@ def get_arguments() -> argparse.Namespace:
     io_args.add_argument(
         "-v", "--val", help="Validation input folder/file", nargs="+", action="extend", type=str, required=False
     )
+    io_args.add_argument("--use-xlsx", help="Use XLSX file", action="store_true")
     io_args.add_argument("-x", "--xlsx", help="XLSX file with labels", type=str, default=None)
 
     io_args.add_argument("-c", "--checkpoint", help="Checkpoint file", type=str, default=None)
@@ -86,14 +87,6 @@ def get_git_hash() -> str:
 
 
 def main(args: argparse.Namespace):
-    training_paths = get_file_paths(args.train, formats=supported_image_formats)
-    if args.val is None:
-        val_paths = None
-    else:
-        val_paths = get_file_paths(args.val, formats=supported_image_formats)
-    xlsx_file = Path(args.xlsx)
-    if not xlsx_file.exists():
-        raise FileNotFoundError(f"XLSX file {xlsx_file} does not exist")
 
     if args.checkpoint is not None:
         checkpoint_path = Path(args.checkpoint)
@@ -108,19 +101,47 @@ def main(args: argparse.Namespace):
         ]
     )
 
-    data_module = DocumentSeparationModule(
-        training_paths=training_paths,
-        val_paths=val_paths,
-        xlsx_file=xlsx_file,
-        transform=transform,
-        batch_size=args.batch_size,
-        number_of_images=args.number_of_images,
-        num_workers=args.num_workers,
-        randomize_document_order=args.randomize_document_order,
-        sample_same_inventory=args.sample_same_inventory,
-        wrap_round=args.wrap_round,
-        split_ratio=args.split_ratio,
-    )
+    if args.use_xlsx:
+        training_paths = get_file_paths(args.train, formats=supported_image_formats)
+        if args.val is None:
+            val_paths = None
+        else:
+            val_paths = get_file_paths(args.val, formats=supported_image_formats)
+        xlsx_file = Path(args.xlsx)
+        if not xlsx_file.exists():
+            raise FileNotFoundError(f"XLSX file {xlsx_file} does not exist")
+        data_module = DocumentSeparationModuleXLSX(
+            training_paths=training_paths,
+            val_paths=val_paths,
+            xlsx_file=xlsx_file,
+            transform=transform,
+            batch_size=args.batch_size,
+            number_of_images=args.number_of_images,
+            num_workers=args.num_workers,
+            randomize_document_order=args.randomize_document_order,
+            sample_same_inventory=args.sample_same_inventory,
+            wrap_round=args.wrap_round,
+            split_ratio=args.split_ratio,
+        )
+    else:
+        training_paths = get_file_paths(args.train, formats=[".json"])
+        if args.val is None:
+            val_paths = None
+        else:
+            val_paths = get_file_paths(args.val, formats=[".json"])
+
+        data_module = DocumentSeparationModuleJSON(
+            json_files_train=training_paths,
+            json_files_val=val_paths,
+            transform=transform,
+            batch_size=args.batch_size,
+            number_of_images=args.number_of_images,
+            num_workers=args.num_workers,
+            randomize_document_order=args.randomize_document_order,
+            sample_same_inventory=args.sample_same_inventory,
+            wrap_round=args.wrap_round,
+            split_ratio=args.split_ratio,
+        )
     model = DocumentSeparator(
         dropout=args.dropout,
         label_smoothing=args.label_smoothing,

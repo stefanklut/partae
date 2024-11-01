@@ -3,6 +3,7 @@ import functools
 import json
 import logging
 import random
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor as ThreadPool
 from pathlib import Path
@@ -11,7 +12,7 @@ from typing import Optional
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-from natsort import os_sorted
+from natsort import natsorted, os_sorted
 from PIL import Image
 from tqdm import tqdm
 
@@ -45,10 +46,13 @@ def keypress(event):
     # print('press', event.key)
     if event.key in ["q", "escape"]:
         sys.exit()
-    if event.key in [" ", "right"]:
+    if event.key in ["right"]:
         _keypress_result = "forward"
         return
-    if event.key in ["backspace", "left"]:
+    if event.key in [" "]:
+        _keypress_result = "flip"
+        return
+    if event.key in ["left"]:
         _keypress_result = "back"
         return
     if event.key in ["e", "delete"]:
@@ -85,6 +89,40 @@ def get_image(image_path: str) -> Optional[np.ndarray]:
     return np.asarray(image)
 
 
+def scan_id_to_inventory_number(scan_id: str) -> str:
+    if check := re.match(r"(.+)_(.+)_(\d+)(_deelopname\d+)?", scan_id):
+        inventory_number_file = check.group(2)
+        return inventory_number_file
+    else:
+        raise ValueError(f"Scan id {scan_id} does not match the expected format")
+
+
+def json_to_scan_label(path: Path) -> tuple[Path, bool]:
+    with path.open(mode="r") as f:
+        data = json.load(f)
+        is_first_page = data["isFirstPage"]
+        scan_id = data["scanId"]
+        # HACK This is a hack to get the correct file name
+        base = Path("/data/spinque-converted/")
+        inventory_number = scan_id_to_inventory_number(scan_id)
+        inventory_number_dir = path.parent.name
+        if inventory_number_dir != inventory_number:
+            logger.warning(
+                f"Inventory number in dir {inventory_number_dir} does not match with inventory number in file {inventory_number}. Path: {path}"
+            )
+        file_name = base.joinpath(inventory_number, f"{scan_id}.jp2")
+    return file_name, is_first_page
+
+
+def invert_json_is_first_page(path: Path) -> None:
+    with path.open(mode="r") as f:
+        data = json.load(f)
+        data["isFirstPage"] = not data["isFirstPage"]
+        data["user"] = "stefank"
+    with path.open(mode="w") as f:
+        json.dump(data, f)
+
+
 def main(args) -> None:
     """
     Currently running the validation set and showing the ground truth and the prediction side by side
@@ -92,20 +130,21 @@ def main(args) -> None:
     Args:
         args (argparse.Namespace): arguments for where to find the images
     """
-    combined_jsons = {}
+    json_paths = []
     for json_path in args.input:
         json_path = Path(json_path)
-        if not json_path.is_file():
-            raise ValueError(f"Could not find file {json_path}")
-        if not json_path.suffix == ".json":
-            raise ValueError(f"File {json_path} is not a json file")
-        with json_path.open(mode="r") as f:
-            combined_jsons.update(json.load(f))
+        if json_path.is_dir():
+            for path in json_path.rglob("*.json"):
+                # file_name, is_first_page = json_to_scan_label(path)
+                # combined_jsons[file_name] = {"result": is_first_page}
+                json_paths.append(path)
+        if json_path.is_file():
+            assert json_path.suffix == ".json", f"File {json_path} is not a json file"
+            # file_name, is_first_page = json_to_scan_label(json_path)
+            # combined_jsons[file_name] = {"result": is_first_page}
+            json_paths.append(json_path)
 
-    loader = os_sorted(list(combined_jsons.keys()))
-
-    bad_results = np.zeros(len(loader), dtype=bool)
-    delete_results = np.zeros(len(loader), dtype=bool)
+    loader = os_sorted(json_paths)
 
     fig, axes = plt.subplots(1)
     if not isinstance(axes, (list, np.ndarray)):
@@ -122,13 +161,14 @@ def main(args) -> None:
     pool = ThreadPool(4)
 
     for i in range(min(IMAGE_PRELOAD, len(loader))):
-        image_path = loader[i]
-        pool.submit(get_image, image_path)
+        preload_image_path, _ = json_to_scan_label(loader[i])
+        pool.submit(get_image, preload_image_path)
 
     i = 0
     while 0 <= i < len(loader):
-        image_path = loader[i]
-        data = combined_jsons[image_path]
+        json_path = loader[i]
+
+        image_path, is_first_page = json_to_scan_label(json_path)
 
         fig_manager.window.setWindowTitle(str(image_path))
 
@@ -139,7 +179,7 @@ def main(args) -> None:
         image = get_image(image_path)
 
         border = 10
-        color = [255, 0, 0] if data["result"] == 1 else [255, 255, 255]
+        color = [255, 0, 0] if is_first_page == 1 else [255, 255, 255]
         image = cv2.copyMakeBorder(image, border, border, border, border, cv2.BORDER_CONSTANT, value=color)
 
         if image is None:
@@ -147,65 +187,28 @@ def main(args) -> None:
 
         axes[0].imshow(image)
         if i + IMAGE_PRELOAD < len(loader):
-            pool.submit(get_image, loader[i + IMAGE_PRELOAD])
+            preload_image_path, _ = json_to_scan_label(loader[i + IMAGE_PRELOAD])
+            pool.submit(get_image, preload_image_path)
 
-        suptitle = f"{i+1}/{len(loader)}: {Path(image_path).name} result: {data['result']} confidence: {data['confidence']:.2f}"
-
-        if delete_results[i]:
-            suptitle += " DELETE"
-        elif bad_results[i]:
-            suptitle += " BAD"
-
+        suptitle = f"{i+1}/{len(loader)}: {Path(image_path).name} result: {is_first_page}"
         fig.suptitle(suptitle)
+
         # f.title(inputs["file_name"])
+
         global _keypress_result
         _keypress_result = None
         fig.canvas.draw()
         while _keypress_result is None:
             plt.waitforbuttonpress()
-        if _keypress_result == "delete":
-            # print(i+1, f"{inputs['original_file_name']}: DELETE")
-            delete_results[i] = not delete_results[i]
-            bad_results[i] = False
-        elif _keypress_result == "bad":
-            # print(i+1, f"{inputs['original_file_name']}: BAD")
-            bad_results[i] = not bad_results[i]
-            delete_results[i] = False
-        elif _keypress_result == "forward":
+        if _keypress_result == "forward":
             # print(i+1, f"{inputs['original_file_name']}")
             i += 1
         elif _keypress_result == "back":
             # print(i+1, f"{inputs['original_file_name']}: DELETE")
             i -= 1
+        elif _keypress_result == "flip":
+            invert_json_is_first_page(json_path)
 
-    if args.output and (delete_results.any() or bad_results.any()):
-        output_dir = Path(args.output)
-        if not output_dir.is_dir():
-            logger.info(f"Could not find output dir ({output_dir}), creating one at specified location")
-            output_dir.mkdir(parents=True)
-        if delete_results.any():
-            output_delete = output_dir.joinpath("delete.txt")
-            with output_delete.open(mode="w") as f:
-                for i in delete_results.nonzero()[0]:
-                    path = Path(loader[i])
-                    line = path.relative_to(output_dir) if path.is_relative_to(output_dir) else path.resolve()
-                    f.write(f"{line}\n")
-        if bad_results.any():
-            output_bad = output_dir.joinpath("bad.txt")
-            with output_bad.open(mode="w") as f:
-                for i in bad_results.nonzero()[0]:
-                    path = Path(loader[i])
-                    line = path.relative_to(output_dir) if path.is_relative_to(output_dir) else path.resolve()
-                    f.write(f"{line}\n")
-
-        remaining_results = np.logical_not(np.logical_or(bad_results, delete_results))
-        if remaining_results.any():
-            output_remaining = output_dir.joinpath("correct.txt")
-            with output_remaining.open(mode="w") as f:
-                for i in remaining_results.nonzero()[0]:
-                    path = Path(loader[i])
-                    line = path.relative_to(output_dir) if path.is_relative_to(output_dir) else path.resolve()
-                    f.write(f"{line}\n")
     pool.shutdown()
 
 
