@@ -168,8 +168,10 @@ class DocumentSeparationModuleJSON(pl.LightningDataModule):
             data = json.load(f)
             is_first_page = data["isFirstPage"]
             scan_id = data["scanId"]
+
             # HACK This is a hack to get the correct file name
             base = Path("/data/spinque-converted/")
+
             inventory_number = DocumentSeparationModuleJSON.scan_id_to_inventory_number(scan_id)
             inventory_number_dir = path.parent.name
             if inventory_number_dir != inventory_number:

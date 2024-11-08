@@ -61,6 +61,12 @@ def keypress(event):
     if event.key in ["w"]:
         _keypress_result = "bad"
         return
+    if event.key in ["pageup"]:
+        _keypress_result = "forward100"
+        return
+    if event.key in ["pagedown"]:
+        _keypress_result = "back100"
+        return
 
 
 def on_close(event):
@@ -206,6 +212,10 @@ def main(args) -> None:
         elif _keypress_result == "back":
             # print(i+1, f"{inputs['original_file_name']}: DELETE")
             i -= 1
+        elif _keypress_result == "forward100":
+            i += 100
+        elif _keypress_result == "back100":
+            i -= 100
         elif _keypress_result == "flip":
             invert_json_is_first_page(json_path)
 
