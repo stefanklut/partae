@@ -232,7 +232,7 @@ def main(args: argparse.Namespace):
     unfreeze_imagenet_epoch = (
         args.unfreeze_imagenet if isinstance(args.unfreeze_imagenet, int) else int(args.epochs * args.unfreeze_imagenet)
     )
-    print(unfreeze_imagenet_epoch)
+    print("Unfreeze ImageNet at epoch:", unfreeze_imagenet_epoch)
     freeze_imagenet = NamedBackboneFinetuning(
         name="imagenet",
         unfreeze_at_epoch=unfreeze_imagenet_epoch,
@@ -243,7 +243,7 @@ def main(args: argparse.Namespace):
     unfreeze_roberta_epoch = (
         args.unfreeze_roberta if isinstance(args.unfreeze_roberta, int) else int(args.epochs * args.unfreeze_roberta)
     )
-    print(unfreeze_roberta_epoch)
+    print("Unfreeze RoBERTa at epoch:", unfreeze_roberta_epoch)
     freeze_roberta = NamedBackboneFinetuning(
         name="roberta",
         unfreeze_at_epoch=unfreeze_roberta_epoch,
