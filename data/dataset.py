@@ -219,52 +219,40 @@ class DocumentSeparationDataset(Dataset):
             return inventory, document, scan - 1
 
     def __getitem__(self, idx):
+        # Add the previous and next images to the current image
         steps_back = self.number_of_images // 2
         steps_forward = self.number_of_images - 1 - steps_back
 
         if self.randomize_document_order:
-            idcs = []
-            inventory, document, scan = self.idx_to_idcs[idx]
-
-            # Steps back
-            prev_inventory, prev_document, prev_scan = inventory, document, scan
-            for _ in range(steps_back):
-                prev_inventory, prev_document, prev_scan = self.get_random_previous_scan(
-                    prev_inventory, prev_document, prev_scan
-                )
-                idcs.append((prev_inventory, prev_document, prev_scan))
-
-            idcs.reverse()
-
-            # Current
-            idcs.append((inventory, document, scan))
-
-            # Steps forward
-            next_inventory, next_document, next_scan = inventory, document, scan
-            for _ in range(steps_forward):
-                next_inventory, next_document, next_scan = self.get_random_next_scan(next_inventory, next_document, next_scan)
-                idcs.append((next_inventory, next_document, next_scan))
+            next_function = self.get_random_next_scan
+            prev_function = self.get_random_previous_scan
         else:
-            idcs = []
-            inventory, document, scan = self.idx_to_idcs[idx]
+            next_function = self.get_next_scan
+            prev_function = self.get_previous_scan
 
-            # Steps back
-            prev_inventory, prev_document, prev_scan = inventory, document, scan
-            for _ in range(steps_back):
-                prev_inventory, prev_document, prev_scan = self.get_previous_scan(prev_inventory, prev_document, prev_scan)
-                idcs.append((prev_inventory, prev_document, prev_scan))
+        idcs = []
+        # Get the current inventory, document and scan
+        inventory, document, scan = self.idx_to_idcs[idx]
 
-            idcs.reverse()
+        # Get the previous inventory, document and scans based on the number of steps back
+        prev_inventory, prev_document, prev_scan = inventory, document, scan
+        for _ in range(steps_back):
+            prev_inventory, prev_document, prev_scan = prev_function(prev_inventory, prev_document, prev_scan)
+            idcs.append((prev_inventory, prev_document, prev_scan))
 
-            # Current
-            idcs.append((inventory, document, scan))
+        idcs.reverse()  # Reverse the list to get the previous images in the correct order
 
-            # Steps forward
-            next_inventory, next_document, next_scan = inventory, document, scan
-            for _ in range(steps_forward):
-                next_inventory, next_document, next_scan = self.get_next_scan(next_inventory, next_document, next_scan)
-                idcs.append((next_inventory, next_document, next_scan))
+        # Add the current inventory, document and scan
+        idcs.append((inventory, document, scan))
 
+        # Get the next inventory, document and scans based on the number of steps forward
+        next_inventory, next_document, next_scan = inventory, document, scan
+        for _ in range(steps_forward):
+            next_inventory, next_document, next_scan = next_function(next_inventory, next_document, next_scan)
+            idcs.append((next_inventory, next_document, next_scan))
+
+        print(idcs)
+        # From the obtained indices, get the images, texts and targets
         targets = defaultdict(list)
         _images = []
         texts = []
