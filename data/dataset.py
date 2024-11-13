@@ -270,11 +270,11 @@ class DocumentSeparationDataset(Dataset):
             prev_inventory, prev_document, prev_scan = inventory, document, scan
         for step_back in range(steps_back):
             if len(idx_prev) > step_back:
-                prev_inventory, prev_document, prev_scan = self.idx_to_idcs[idx_prev[step_back]]
+                idcs.append(self.idx_to_idcs[idx_prev[step_back]])
             else:
                 prev_inventory, prev_document, prev_scan = prev_function(prev_inventory, prev_document, prev_scan)
+                idcs.append((prev_inventory, prev_document, prev_scan))
 
-            idcs.append((prev_inventory, prev_document, prev_scan))
 
         idcs.reverse()  # Reverse the list to get the previous images in the correct order
 
@@ -288,11 +288,11 @@ class DocumentSeparationDataset(Dataset):
             next_inventory, next_document, next_scan = inventory, document, scan
         for steps_forward in range(steps_forward):
             if len(idx_next) > steps_forward:
-                next_inventory, next_document, next_scan = self.idx_to_idcs[idx_next[steps_forward]]
+                idcs.append(self.idx_to_idcs[idx_next[steps_forward]])
             else:
                 next_inventory, next_document, next_scan = next_function(next_inventory, next_document, next_scan)
+                idcs.append((next_inventory, next_document, next_scan))
 
-            idcs.append((next_inventory, next_document, next_scan))
 
         # insert random scan
         if np.random.randint(1, 100) <= self.random_scan_insert_chance:
