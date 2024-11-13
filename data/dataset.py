@@ -31,14 +31,19 @@ class DocumentSeparationDataset(Dataset):
         wrap_round=False,
         transform=None,
         check_files=False,
+        # percentage value 0-100
+        shuffle_doc_chance: int = 0,
     ):
         self.image_paths = image_paths
         assert mode in ["train", "val", "test"], "Mode must be one of 'train', 'val', 'test'"
         self.mode = mode
         self.idx_to_idcs = {}
+        self.icds_to_idx = {}
         idx = 0
         self.doc_lengths = defaultdict(list)
         self.inventory_lengths = []
+        self.shuffle_doc_chance = shuffle_doc_chance
+        self.random_scan_insert_chance = random_scan_insert_chance
 
         total_scans = sum(sum(len(doc) for doc in inventory) for inventory in image_paths)
         with tqdm(total=total_scans, desc="Checking files") as pbar:
@@ -155,6 +160,13 @@ class DocumentSeparationDataset(Dataset):
             and scan == len(self.image_paths[inventory][document]) - 1
         )
 
+    def get_indices_of_document(self, inventory, document):
+        indices = []
+        for scan in range(len(self.image_paths[inventory][document])):
+            indices.append(self.icds_to_idx[(inventory, document, scan)])
+
+        return indices
+
     def get_next_scan(self, inventory, document, scan):
         if self.end_of_document(inventory, document, scan):
             if self.end_of_inventory(inventory, document, scan):
@@ -223,6 +235,21 @@ class DocumentSeparationDataset(Dataset):
         steps_back = self.number_of_images // 2
         steps_forward = self.number_of_images - 1 - steps_back
 
+        lowest_index_of_doc = -1
+        highest_index = -1
+        idx_prev = []
+        idx_next = []
+        if np.random.randint(1, 100) <= self.shuffle_doc_chance:
+            (inv, doc, scan) = self.idx_to_idcs[idx]
+            indices_of_doc = self.get_indices_of_document(inv, doc)
+            highest_index = indices_of_doc[-1]
+            lowest_index_of_doc = indices_of_doc[0]
+            np.random.shuffle(indices_of_doc)
+            idx_in_doc = indices_of_doc.index(idx)
+            idx_prev = indices_of_doc[:idx_in_doc]
+            idx_next = indices_of_doc[idx_in_doc + 1:]
+
+
         if self.randomize_document_order:
             next_function = self.get_random_next_scan
             prev_function = self.get_random_previous_scan
@@ -235,9 +262,16 @@ class DocumentSeparationDataset(Dataset):
         inventory, document, scan = self.idx_to_idcs[idx]
 
         # Get the previous inventory, document and scans based on the number of steps back
-        prev_inventory, prev_document, prev_scan = inventory, document, scan
-        for _ in range(steps_back):
-            prev_inventory, prev_document, prev_scan = prev_function(prev_inventory, prev_document, prev_scan)
+        if lowest_index_of_doc > -1:
+            prev_inventory, prev_document, prev_scan = self.idx_to_idcs[lowest_index_of_doc]
+        else:
+            prev_inventory, prev_document, prev_scan = inventory, document, scan
+        for step_back in range(steps_back):
+            if len(idx_prev) > step_back:
+                prev_inventory, prev_document, prev_scan = self.idx_to_idcs[idx_prev[step_back]]
+            else:
+                prev_inventory, prev_document, prev_scan = prev_function(prev_inventory, prev_document, prev_scan)
+
             idcs.append((prev_inventory, prev_document, prev_scan))
 
         idcs.reverse()  # Reverse the list to get the previous images in the correct order
@@ -246,9 +280,16 @@ class DocumentSeparationDataset(Dataset):
         idcs.append((inventory, document, scan))
 
         # Get the next inventory, document and scans based on the number of steps forward
-        next_inventory, next_document, next_scan = inventory, document, scan
-        for _ in range(steps_forward):
-            next_inventory, next_document, next_scan = next_function(next_inventory, next_document, next_scan)
+        if highest_index > -1:
+            next_inventory, next_document, next_scan = self.idx_to_idcs[highest_index]
+        else:
+            next_inventory, next_document, next_scan = inventory, document, scan
+        for steps_forward in range(steps_forward):
+            if len(idx_next) > steps_forward:
+                next_inventory, next_document, next_scan = self.idx_to_idcs[idx_next[steps_forward]]
+            else:
+                next_inventory, next_document, next_scan = next_function(next_inventory, next_document, next_scan)
+
             idcs.append((next_inventory, next_document, next_scan))
 
         print(idcs)
