@@ -18,18 +18,18 @@ The recommended way of running this tool is inside a conda environment. To ensur
 
 To start clone the github repo to your local machine using either HTTPS:
 ```sh
-git clone https://github.com/stefanklut/document-separation.git
+git clone https://github.com/stefanklut/partae.git
 ```
 
 Or using SSH:
 ```sh
-git clone git@github.com:stefanklut/document-separation.git
+git clone git@github.com:stefanklut/partae.git
 ```
 
 
 And make go to the working directory:
 ```sh
-cd document-separation
+cd partae
 ```
 
 ### Conda
@@ -49,7 +49,7 @@ mamba env create -f environment.yml
 
 When running the tool always activate the conda environment
 ```sh
-conda activate separation
+conda activate partae
 ```
 
 ### Docker
