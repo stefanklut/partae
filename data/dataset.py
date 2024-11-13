@@ -33,6 +33,8 @@ class DocumentSeparationDataset(Dataset):
         check_files=False,
         # percentage value 0-100
         shuffle_doc_chance: int = 0,
+        # percentage value 0-100
+        random_scan_insert_chance: int = 0
     ):
         self.image_paths = image_paths
         assert mode in ["train", "val", "test"], "Mode must be one of 'train', 'val', 'test'"
@@ -291,6 +293,18 @@ class DocumentSeparationDataset(Dataset):
                 next_inventory, next_document, next_scan = next_function(next_inventory, next_document, next_scan)
 
             idcs.append((next_inventory, next_document, next_scan))
+
+        # insert random scan
+        if np.random.randint(1, 100) <= self.random_scan_insert_chance:
+            rand_idc = (inventory, document, scan)
+            while rand_idc in idcs:
+                rand_idc = list(self.idx_to_idcs.values())[np.random.randint(0, len(self.idx_to_idcs))]
+
+            insert_pos = np.random.randint(0, len(rand_idc) - 1)
+            # if is middle item
+            if insert_pos == (len(idcs) // 2):
+                insert_pos += 1
+            idcs[insert_pos] = rand_idc
 
         print(idcs)
         # From the obtained indices, get the images, texts and targets
