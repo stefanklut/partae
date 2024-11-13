@@ -1,4 +1,4 @@
-name: separation
+name: partae
 channels:
   - default
   - pytorch
