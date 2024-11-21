@@ -65,9 +65,11 @@ class DocumentSeparationModuleXLSX(pl.LightningDataModule):
         batch_size: int = 8,
         number_of_images: int = 3,
         num_workers: int = 8,
-        randomize_document_order: bool = True,
         sample_same_inventory: bool = False,
         wrap_round: bool = False,
+        prob_shuffle_document: float = 0.0,
+        prob_randomize_document_order: float = 0.0,
+        prob_random_scan_insert: float = 0.0,
         split_ratio: float = 0.8,
     ):
         super().__init__()
@@ -83,9 +85,13 @@ class DocumentSeparationModuleXLSX(pl.LightningDataModule):
         self.batch_size = batch_size
         self.number_of_images = number_of_images
         self.num_workers = num_workers
-        self.randomize_document_order = randomize_document_order
+
         self.sample_same_inventory = sample_same_inventory
         self.wrap_round = wrap_round
+
+        self.prob_shuffle_document = prob_shuffle_document
+        self.prob_randomize_document_order = prob_randomize_document_order
+        self.prob_random_scan_insert = prob_random_scan_insert
 
         self.training_paths = link_with_paths(self.xlsx_file, training_paths)
         self.val_paths = link_with_paths(self.xlsx_file, val_paths)
@@ -100,14 +106,21 @@ class DocumentSeparationModuleXLSX(pl.LightningDataModule):
                 self.training_paths,
                 number_of_images=self.number_of_images,
                 transform=self.transform,
-                randomize_document_order=self.randomize_document_order,
                 sample_same_inventory=self.sample_same_inventory,
                 wrap_round=self.wrap_round,
+                prob_shuffle_document=self.prob_shuffle_document,
+                prob_randomize_document_order=self.prob_randomize_document_order,
+                prob_random_scan_insert=self.prob_random_scan_insert,
             )
             self.val_dataset = DocumentSeparationDataset(
                 self.val_paths,
                 number_of_images=self.number_of_images,
                 transform=self.transform,
+                sample_same_inventory=True,
+                wrap_round=False,
+                prob_shuffle_document=0.0,
+                prob_randomize_document_order=0.0,
+                prob_random_scan_insert=0.0,
             )
 
     def train_dataloader(self):
@@ -130,9 +143,11 @@ class DocumentSeparationModuleJSON(pl.LightningDataModule):
         batch_size: int = 8,
         number_of_images: int = 3,
         num_workers: int = 8,
-        randomize_document_order: bool = True,
         sample_same_inventory: bool = False,
         wrap_round: bool = False,
+        prob_shuffle_document: float = 0.0,
+        prob_randomize_document_order: float = 0.0,
+        prob_random_scan_insert: float = 0.0,
         split_ratio: float = 0.8,
     ):
         super().__init__()
@@ -147,9 +162,13 @@ class DocumentSeparationModuleJSON(pl.LightningDataModule):
         self.batch_size = batch_size
         self.number_of_images = number_of_images
         self.num_workers = num_workers
-        self.randomize_document_order = randomize_document_order
+
         self.sample_same_inventory = sample_same_inventory
         self.wrap_round = wrap_round
+
+        self.prob_shuffle_document = prob_shuffle_document
+        self.prob_randomize_document_order = prob_randomize_document_order
+        self.prob_random_scan_insert = prob_random_scan_insert
 
         self.training_paths = self.jsons_to_paths(training_paths)
         self.val_paths = self.jsons_to_paths(val_paths)
@@ -224,14 +243,21 @@ class DocumentSeparationModuleJSON(pl.LightningDataModule):
                 self.training_paths,
                 number_of_images=self.number_of_images,
                 transform=self.transform,
-                randomize_document_order=self.randomize_document_order,
                 sample_same_inventory=self.sample_same_inventory,
                 wrap_round=self.wrap_round,
+                prob_shuffle_document=self.prob_shuffle_document,
+                prob_randomize_document_order=self.prob_randomize_document_order,
+                prob_random_scan_insert=self.prob_random_scan_insert,
             )
             self.val_dataset = DocumentSeparationDataset(
                 self.val_paths,
                 number_of_images=self.number_of_images,
                 transform=self.transform,
+                sample_same_inventory=True,
+                wrap_round=False,
+                prob_shuffle_document=0.0,
+                prob_randomize_document_order=0.0,
+                prob_random_scan_insert=0.0,
             )
 
     def train_dataloader(self):

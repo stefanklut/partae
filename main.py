@@ -57,8 +57,14 @@ def get_arguments() -> argparse.Namespace:
 
     dataset_args = parser.add_argument_group("Dataset")
     dataset_args.add_argument("-n", "--number_of_images", help="Number of images", type=int, default=3)
-    dataset_args.add_argument("--randomize_document_order", help="Randomize document order", action="store_true")
-    dataset_args.add_argument("--sample_same_inventory", help="Sample same inventory", action="store_true")
+    dataset_args.add_argument("--prob_shuffle_document", help="Probability to shuffle document", type=float, default=0.2)
+    dataset_args.add_argument(
+        "--prob_randomize_document_order", help="Probability to randomize document order", type=float, default=1.0
+    )
+    dataset_args.add_argument("--prob_random_scan_insert", help="Probability to insert random scan", type=float, default=0.5)
+    # dataset_args.add_argument("--sample_same_inventory", help="Sample same inventory", action="store_true")
+    dataset_args.add_argument("--sample_all_inventories", help="Sample all inventories", action="store_true")
+
     dataset_args.add_argument("--wrap_round", help="Wrap round", action="store_true")
     dataset_args.add_argument("--split_ratio", help="Split ratio", type=float, default=0.8)
 
@@ -118,9 +124,11 @@ def main(args: argparse.Namespace):
             batch_size=args.batch_size,
             number_of_images=args.number_of_images,
             num_workers=args.num_workers,
-            randomize_document_order=args.randomize_document_order,
-            sample_same_inventory=args.sample_same_inventory,
+            sample_same_inventory=not args.sample_all_inventories,
             wrap_round=args.wrap_round,
+            prob_shuffle_document=args.prob_shuffle_document,
+            prob_random_scan_insert=args.prob_random_scan_insert,
+            prob_randomize_document_order=args.prob_randomize_document_order,
             split_ratio=args.split_ratio,
         )
     else:
@@ -137,9 +145,11 @@ def main(args: argparse.Namespace):
             batch_size=args.batch_size,
             number_of_images=args.number_of_images,
             num_workers=args.num_workers,
-            randomize_document_order=args.randomize_document_order,
-            sample_same_inventory=args.sample_same_inventory,
+            sample_same_inventory=not args.sample_all_inventories,
             wrap_round=args.wrap_round,
+            prob_shuffle_document=args.prob_shuffle_document,
+            prob_random_scan_insert=args.prob_random_scan_insert,
+            prob_randomize_document_order=args.prob_randomize_document_order,
             split_ratio=args.split_ratio,
         )
     model = DocumentSeparator(

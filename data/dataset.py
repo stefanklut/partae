@@ -3,6 +3,7 @@ import sys
 from collections import defaultdict
 from multiprocessing import Pool
 from pathlib import Path
+from queue import Queue
 from typing import Optional, Sequence
 
 import numpy as np
@@ -24,28 +25,24 @@ class DocumentSeparationDataset(Dataset):
         self,
         image_paths: Sequence[Sequence[Sequence[Path]]],
         mode: str = "train",
-        target: Optional[dict[str, Sequence[Sequence[Sequence[int]]]]] = None,
         number_of_images=3,
-        randomize_document_order=False,
         sample_same_inventory=True,
         wrap_round=False,
         transform=None,
         check_files=False,
-        # percentage value 0-100
-        shuffle_doc_chance: int = 0,
-        # percentage value 0-100
-        random_scan_insert_chance: int = 0
+        # percentage value 0-1
+        prob_shuffle_document: float = 0.0,
+        prob_randomize_document_order: float = 0.0,
+        prob_random_scan_insert: float = 0.0,
     ):
         self.image_paths = image_paths
         assert mode in ["train", "val", "test"], "Mode must be one of 'train', 'val', 'test'"
         self.mode = mode
         self.idx_to_idcs = {}
-        self.icds_to_idx = {}
         idx = 0
         self.doc_lengths = defaultdict(list)
-        self.inventory_lengths = []
-        self.shuffle_doc_chance = shuffle_doc_chance
-        self.random_scan_insert_chance = random_scan_insert_chance
+        self.prob_shuffle_document = prob_shuffle_document
+        self.prob_random_scan_insert = prob_random_scan_insert
 
         total_scans = sum(sum(len(doc) for doc in inventory) for inventory in image_paths)
         with tqdm(total=total_scans, desc="Checking files") as pbar:
@@ -66,37 +63,16 @@ class DocumentSeparationDataset(Dataset):
 
         assert number_of_images > 0, "Number of images must be greater than 0"
         self.number_of_images = number_of_images
-        self.randomize_document_order = randomize_document_order
+        self.steps_back = self.number_of_images // 2 + 1
+        self.steps_forward = self.number_of_images - 1 - self.steps_back + 1
+
+        self.next_scans = []
+        self.prev_scans = []
+
+        self.prob_randomize_document_order = prob_randomize_document_order
         self.sample_same_inventory = sample_same_inventory
         self.wrap_round = wrap_round
         self.transform = transform
-
-        if self.mode in ["train", "val"]:
-            if target is not None:
-                self.target = target
-            else:
-                self.target = {"start": [], "end": [], "middle": []}
-                # If no target is provided, assume that the first image in the document is the start, and the last is the end, and all others are in between
-
-                for i in range(len(image_paths)):
-                    _target_inventory_start = []
-                    _target_inventory_end = []
-                    _target_inventory_middle = []
-
-                    for j in range(len(image_paths[i])):
-                        _target_document_start = [1] + [0] * (len(image_paths[i][j]) - 1)
-                        _target_document_end = [0] * (len(image_paths[i][j]) - 1) + [1]
-                        _target_document_middle = [
-                            int(not (x or y)) for x, y in zip(_target_document_start, _target_document_end)
-                        ]
-
-                        _target_inventory_start.append(_target_document_start)
-                        _target_inventory_end.append(_target_document_end)
-                        _target_inventory_middle.append(_target_document_middle)
-
-                    self.target["start"].append(_target_inventory_start)
-                    self.target["end"].append(_target_inventory_end)
-                    self.target["middle"].append(_target_inventory_middle)
 
     def __len__(self):
         return self.len
@@ -130,7 +106,7 @@ class DocumentSeparationDataset(Dataset):
         shape = page_data.get_size()
         return text, shape
 
-    def out_of_bounds(self, inventory, document, scan):
+    def is_out_of_bounds(self, inventory, document, scan):
         return (
             inventory < 0
             or document < 0
@@ -140,64 +116,85 @@ class DocumentSeparationDataset(Dataset):
             or scan >= len(self.image_paths[inventory][document])
         )
 
-    def start_of_inventory(self, inventory, document, scan):
-        return document == 0 and scan == 0
+    def scan_in_document(self, inventory, document, scan):
+        return 0 <= scan and scan < len(self.image_paths[inventory][document])
 
-    def end_of_inventory(self, inventory, document, scan):
-        return document == len(self.image_paths[inventory]) - 1 and scan == len(self.image_paths[inventory][document]) - 1
+    def get_first_document(self, inventory):
+        return inventory, 0
 
-    def start_of_document(self, inventory, document, scan):
-        return scan == 0
+    def get_last_document(self, inventory):
+        return inventory, len(self.image_paths[inventory]) - 1
 
-    def end_of_document(self, inventory, document, scan):
-        return scan == len(self.image_paths[inventory][document]) - 1
+    def get_next_document(self, inventory, document):
+        if self.is_out_of_bounds(inventory, document + 1, 0):
+            return None
+        return inventory, document + 1
 
-    def is_first_document(self, inventory, document, scan):
-        return inventory == 0 and document == 0 and scan == 0
+    def get_prev_document(self, inventory, document):
+        if self.is_out_of_bounds(inventory, document - 1, 0):
+            return None
+        return inventory, document - 1
 
-    def is_last_document(self, inventory, document, scan):
-        return (
-            inventory == len(self.image_paths) - 1
-            and document == len(self.image_paths[inventory]) - 1
-            and scan == len(self.image_paths[inventory][document]) - 1
-        )
+    def get_first_inventory(self):
+        return 0
 
-    def get_indices_of_document(self, inventory, document):
-        indices = []
-        for scan in range(len(self.image_paths[inventory][document])):
-            indices.append(self.icds_to_idx[(inventory, document, scan)])
+    def get_last_inventory(self):
+        return len(self.image_paths) - 1
 
-        return indices
+    def get_next_inventory(self, inventory):
+        if self.is_out_of_bounds(inventory + 1, 0, 0):
+            return None
+        return inventory + 1
 
-    def get_next_scan(self, inventory, document, scan):
-        if self.end_of_document(inventory, document, scan):
-            if self.end_of_inventory(inventory, document, scan):
-                if self.is_last_document(inventory, document, scan):
-                    if self.wrap_round:
-                        return 0, 0, 0
-                    else:
-                        return inventory, document, scan + 1
-                else:
-                    return inventory + 1, 0, 0
-            else:
-                return inventory, document + 1, 0
-        else:
-            return inventory, document, scan + 1
+    def get_prev_inventory(self, inventory):
+        if self.is_out_of_bounds(inventory - 1, 0, 0):
+            return None
+        return inventory - 1
 
-    def get_previous_scan(self, inventory, document, scan):
-        if self.start_of_document(inventory, document, scan):
-            if self.start_of_inventory(inventory, document, scan):
-                if self.is_first_document(inventory, document, scan):
-                    if self.wrap_round:
-                        return len(self.image_paths) - 1, len(self.image_paths[-1]) - 1, len(self.image_paths[-1][-1]) - 1
-                    else:
-                        return inventory, document, scan - 1
-                else:
-                    return inventory - 1, len(self.image_paths[inventory - 1]) - 1, len(self.image_paths[inventory - 1][-1]) - 1
-            else:
-                return inventory, document - 1, len(self.image_paths[inventory][document - 1]) - 1
-        else:
-            return inventory, document, scan - 1
+    def get_all_scans_in_document(self, inventory, document):
+        if self.is_out_of_bounds(inventory, document, 0):
+            return []
+        return [(inventory, document, i) for i in range(len(self.image_paths[inventory][document]))]
+
+    def fill_next_prev_scans(self, inventory, document, scan):
+        self.next_scans = []
+        self.prev_scans = []
+
+        if self.prob_shuffle_document > np.random.rand():
+            print("Shuffling")
+            all_scans = self.get_all_scans_in_document(inventory, document)
+            if all_scans is None:
+                raise ValueError("Document is out of bounds")
+            if len(all_scans) == 1:
+                return
+            np.random.shuffle(all_scans)
+
+            before_scan = True
+            after_scan = False
+
+            for i in range(len(all_scans)):
+                if all_scans[i] == (inventory, document, scan):
+                    before_scan = False
+                    after_scan = True
+                    continue
+                if before_scan:
+                    self.prev_scans.append(all_scans[i])
+                elif after_scan:
+                    self.next_scans.append(all_scans[i])
+
+    def get_next_scans_in_document(self, inventory, document, scan):
+        if self.next_scans or self.prev_scans:
+            return self.next_scans
+        assert self.scan_in_document(inventory, document, scan), "Scan is out of bounds"
+        output = [(inventory, document, i) for i in range(scan + 1, len(self.image_paths[inventory][document]))]
+        return output
+
+    def get_prev_scans_in_document(self, inventory, document, scan):
+        if self.next_scans or self.prev_scans:
+            return self.prev_scans
+        assert self.scan_in_document(inventory, document, scan), f"Scan is out of bounds {inventory} {document} {scan}"
+        output = [(inventory, document, i) for i in range(0, scan)]
+        return output
 
     # https://stackoverflow.com/a/64015315
     @staticmethod
@@ -210,101 +207,136 @@ class DocumentSeparationDataset(Dataset):
         # shift values to avoid the excluded number
         return choices + (choices >= excluding)
 
-    def get_random_next_scan(self, inventory, document, scan):
-        if self.end_of_document(inventory, document, scan):
-            if not self.sample_same_inventory:
-                random_inventory = self.random_choice_except(len(self.image_paths), inventory)
+    def get_scans_in_next_document(self, inventory, document):
+        if self.prob_randomize_document_order > np.random.rand():
+            # Randomize document order
+            if self.sample_same_inventory:
+                next_inventory_document = inventory, self.random_choice_except(len(self.image_paths[inventory]), document)
             else:
-                random_inventory = inventory
-            random_document = np.random.choice(len(self.image_paths[random_inventory]))
-            return random_inventory, random_document, 0
+                next_inventory = self.random_choice_except(len(self.image_paths), inventory)
+                next_inventory_document = next_inventory, np.random.choice(len(self.image_paths[next_inventory]))
         else:
-            return inventory, document, scan + 1
+            # Get next document
+            next_inventory_document = self.get_next_document(inventory, document)
 
-    def get_random_previous_scan(self, inventory, document, scan):
-        if self.start_of_document(inventory, document, scan):
-            if not self.sample_same_inventory:
-                random_inventory = self.random_choice_except(len(self.image_paths), inventory)
+        # If the next document is out of bounds, check if we should wrap around
+        if next_inventory_document is None:
+            if self.wrap_round:
+                if self.sample_same_inventory:
+                    next_inventory_document = self.get_first_document(inventory)
+                else:
+                    next_inventory = self.get_next_inventory(inventory)
+                    if next_inventory is None:
+                        next_inventory = self.get_first_inventory()
+                    next_inventory_document = self.get_first_document(next_inventory)
             else:
-                random_inventory = inventory
-            random_document = np.random.choice(len(self.image_paths[random_inventory]))
-            return random_inventory, random_document, len(self.image_paths[random_inventory][random_document]) - 1
+                return None, (inventory, document)
+
+        scans = self.get_all_scans_in_document(*next_inventory_document)
+
+        if self.prob_shuffle_document > np.random.rand():
+            np.random.shuffle(scans)
+
+        return scans, next_inventory_document
+
+    def get_scans_in_prev_document(self, inventory, document):
+        if self.prob_randomize_document_order > np.random.rand():
+            # Randomize document order
+            if self.sample_same_inventory:
+                prev_inventory_document = inventory, self.random_choice_except(len(self.image_paths[inventory]), document)
+            else:
+                prev_inventory = self.random_choice_except(len(self.image_paths), inventory)
+                prev_inventory_document = prev_inventory, np.random.choice(len(self.image_paths[prev_inventory]))
         else:
-            return inventory, document, scan - 1
+            # Get previous document
+            prev_inventory_document = self.get_prev_document(inventory, document)
+
+        # If the previous document is out of bounds, check if we should wrap around
+        if prev_inventory_document is None:
+            if self.wrap_round:
+                if self.sample_same_inventory:
+                    prev_inventory_document = self.get_last_document(inventory)
+                else:
+                    prev_inventory = self.get_prev_inventory(inventory)
+                    if prev_inventory is None:
+                        prev_inventory = self.get_last_inventory()
+                    prev_inventory_document = self.get_last_document(prev_inventory)
+            else:
+                return None, (inventory, document)
+
+        scans = self.get_all_scans_in_document(*prev_inventory_document)
+
+        if self.prob_shuffle_document > np.random.rand():
+            np.random.shuffle(scans)
+
+        return scans, prev_inventory_document
+
+    # TODO Finish these
+    def get_next_idcs(self, inventory, document, scan):
+        next_idcs = []
+        next_idcs.extend(self.get_next_scans_in_document(inventory, document, scan))
+        next_document = inventory, document
+        while len(next_idcs) < self.steps_forward:
+
+            next_scans, next_document = self.get_scans_in_next_document(*next_document)
+            if next_scans is None:
+                next_idcs.append(None)
+                continue
+            next_idcs.extend(next_scans)
+        return next_idcs[: self.steps_forward]
+
+    def get_previous_idcs(self, inventory, document, scan):
+        prev_idcs = []
+        prev_idcs.extend(self.get_prev_scans_in_document(inventory, document, scan))
+        prev_document = inventory, document
+        while len(prev_idcs) < self.steps_back:
+            prev_scans, prev_document = self.get_scans_in_prev_document(*prev_document)
+            if prev_scans is None:
+                print("None")
+                prev_idcs = [None] + prev_idcs
+                continue
+            prev_idcs = prev_scans + prev_idcs
+
+        return prev_idcs[-self.steps_back :]
+
+    def insert_random_scan(self, idcs):
+        if self.prob_random_scan_insert > np.random.rand():
+            middle_position = len(idcs) // 2
+            remaining_positions = list(set(range(len(idcs))) - set([middle_position]))
+            insert_position = np.random.choice(remaining_positions)
+
+            if self.sample_same_inventory:
+                possible_scans = [
+                    self.idx_to_idcs[idx]
+                    for idx in idcs
+                    if self.idx_to_idcs[idx][0] == self.idx_to_idcs[idcs[middle_position]][0]
+                    and self.idx_to_idcs[idx] not in idcs
+                ]
+            else:
+                possible_scans = [self.idx_to_idcs[idx] for idx in idcs if self.idx_to_idcs[idx] not in idcs]
+
+            idcs[insert_position] = np.random.choice(possible_scans)
 
     def __getitem__(self, idx):
-        # Add the previous and next images to the current image
-        steps_back = self.number_of_images // 2
-        steps_forward = self.number_of_images - 1 - steps_back
-
-        lowest_index_of_doc = -1
-        highest_index = -1
-        idx_prev = []
-        idx_next = []
-        if np.random.randint(1, 100) <= self.shuffle_doc_chance:
-            (inv, doc, scan) = self.idx_to_idcs[idx]
-            indices_of_doc = self.get_indices_of_document(inv, doc)
-            highest_index = indices_of_doc[-1]
-            lowest_index_of_doc = indices_of_doc[0]
-            np.random.shuffle(indices_of_doc)
-            idx_in_doc = indices_of_doc.index(idx)
-            idx_prev = indices_of_doc[:idx_in_doc]
-            idx_next = indices_of_doc[idx_in_doc + 1:]
-
-
-        if self.randomize_document_order:
-            next_function = self.get_random_next_scan
-            prev_function = self.get_random_previous_scan
-        else:
-            next_function = self.get_next_scan
-            prev_function = self.get_previous_scan
-
         idcs = []
         # Get the current inventory, document and scan
         inventory, document, scan = self.idx_to_idcs[idx]
 
-        # Get the previous inventory, document and scans based on the number of steps back
-        if lowest_index_of_doc > -1:
-            prev_inventory, prev_document, prev_scan = self.idx_to_idcs[lowest_index_of_doc]
-        else:
-            prev_inventory, prev_document, prev_scan = inventory, document, scan
-        for step_back in range(steps_back):
-            if len(idx_prev) > step_back:
-                idcs.append(self.idx_to_idcs[idx_prev[step_back]])
-            else:
-                prev_inventory, prev_document, prev_scan = prev_function(prev_inventory, prev_document, prev_scan)
-                idcs.append((prev_inventory, prev_document, prev_scan))
+        self.fill_next_prev_scans(inventory, document, scan)
 
+        # Add the precceding scans
+        idcs.extend(self.get_previous_idcs(inventory, document, scan))
 
-        idcs.reverse()  # Reverse the list to get the previous images in the correct order
-
-        # Add the current inventory, document and scan
+        # Add the current scan
         idcs.append((inventory, document, scan))
 
-        # Get the next inventory, document and scans based on the number of steps forward
-        if highest_index > -1:
-            next_inventory, next_document, next_scan = self.idx_to_idcs[highest_index]
-        else:
-            next_inventory, next_document, next_scan = inventory, document, scan
-        for steps_forward in range(steps_forward):
-            if len(idx_next) > steps_forward:
-                idcs.append(self.idx_to_idcs[idx_next[steps_forward]])
-            else:
-                next_inventory, next_document, next_scan = next_function(next_inventory, next_document, next_scan)
-                idcs.append((next_inventory, next_document, next_scan))
+        # Add the following scans
+        idcs.extend(self.get_next_idcs(inventory, document, scan))
 
+        self.insert_random_scan(idcs)
 
+        # TODO: Move to separate function
         # insert random scan
-        if np.random.randint(1, 100) <= self.random_scan_insert_chance:
-            rand_idc = (inventory, document, scan)
-            while rand_idc in idcs:
-                rand_idc = list(self.idx_to_idcs.values())[np.random.randint(0, len(self.idx_to_idcs))]
-
-            insert_pos = np.random.randint(0, len(rand_idc) - 1)
-            # if is middle item
-            if insert_pos == (len(idcs) // 2):
-                insert_pos += 1
-            idcs[insert_pos] = rand_idc
 
         print(idcs)
         # From the obtained indices, get the images, texts and targets
@@ -313,10 +345,11 @@ class DocumentSeparationDataset(Dataset):
         texts = []
         shapes = []
         image_paths = []
-        _idcs = []
-        for inventory, document, scan in idcs:
-            _idcs.append((inventory, document, scan))
-            if self.out_of_bounds(inventory, document, scan):
+        for i in range(self.number_of_images):
+            prev_idx = idcs[i]
+            idx = idcs[i + 1]
+            next_idx = idcs[i + 2]
+            if idx is None:
                 image = None
                 shape = (0, 0)
                 text = {
@@ -327,36 +360,30 @@ class DocumentSeparationDataset(Dataset):
                         "baseline": None,
                     }
                 }
-                if self.mode in ["train", "val"]:
-                    target = {
-                        "start": 0,
-                        "end": 0,
-                        "middle": 0,
-                    }
-                image_path = ""
-
             else:
-                image = self.get_image(inventory, document, scan)
-                if image is None:
-                    image_path = self.image_paths[inventory][document][scan]
-                    text, shape = self.get_text(inventory, document, scan)
-                    if self.mode in ["train", "val"]:
-                        target = {
-                            "start": self.target["start"][inventory][document][scan],
-                            "end": self.target["end"][inventory][document][scan],
-                            "middle": self.target["middle"][inventory][document][scan],
-                        }
-                else:
-                    image_path = self.image_paths[inventory][document][scan]
+                inventory, document, scan = idx
 
-                    text, shape = self.get_text(inventory, document, scan)
+            prev_document = prev_idx[1] if prev_idx is not None else None
+            next_document = next_idx[1] if next_idx is not None else None
 
-                    if self.mode in ["train", "val"]:
-                        target = {
-                            "start": self.target["start"][inventory][document][scan],
-                            "end": self.target["end"][inventory][document][scan],
-                            "middle": self.target["middle"][inventory][document][scan],
-                        }
+            start = prev_document is None or prev_document != document
+            end = next_document is None or next_document != document
+            middle = not start and not end
+
+            target = {
+                "start": start,
+                "middle": middle,
+                "end": end,
+            }
+
+            image = self.get_image(inventory, document, scan)
+            if image is None:
+                image_path = self.image_paths[inventory][document][scan]
+            else:
+                image_path = self.image_paths[inventory][document][scan]
+            text, shape = self.get_text(inventory, document, scan)
+            # FIXME set target based on if scans are in the same document
+            target = {}
 
             image_paths.append(image_path)
             _images.append(image)
@@ -383,30 +410,33 @@ class DocumentSeparationDataset(Dataset):
 
         if self.mode in ["train", "val"]:
             output["targets"] = targets
-            output["idcs"] = _idcs
+            output["idcs"] = idcs
 
         return output
 
 
 if __name__ == "__main__":
+
     test_image_paths = [
         [
             [
-                Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0001.jpg"),
-                Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0002.jpg"),
+                Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_62_0109.jpg"),
+                Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_62_0118.jpg"),
             ],
-            [Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0003.jpg")],
-            [Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0004.jpg")],
+            [Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_62_0258.jpg")],
+            [Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_62_0504.jpg")],
             [
-                Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0005.jpg"),
-                Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0006.jpg"),
-                Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0007.jpg"),
+                Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_3097_0039.jpg"),
+                Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_3097_0079.jpg"),
+                Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_3097_0114.jpg"),
             ],
-            [Path("/home/stefan/Downloads/ushmm_test/113I/NL-HaNA_2.09.09_113I_0008.jpg")],
+            [Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_3097_0137.jpg")],
         ]
     ]
     transform = transforms.Compose([transforms.ToTensor(), transforms.Resize((224, 224))])
-    dataset = DocumentSeparationDataset(test_image_paths, transform=transform)
+    dataset = DocumentSeparationDataset(
+        test_image_paths, transform=transform, prob_randomize_document_order=0, sample_same_inventory=True, wrap_round=False
+    )
     import torch.utils.data
 
     from data.dataloader import collate_fn
