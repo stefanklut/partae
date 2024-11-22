@@ -63,8 +63,8 @@ class DocumentSeparationDataset(Dataset):
 
         assert number_of_images > 0, "Number of images must be greater than 0"
         self.number_of_images = number_of_images
-        self.steps_back = self.number_of_images // 2 + 1
-        self.steps_forward = self.number_of_images - 1 - self.steps_back + 1
+        self.steps_back = (self.number_of_images // 2) + 1
+        self.steps_forward = self.number_of_images + 1 - self.steps_back
 
         self.next_scans = []
         self.prev_scans = []
@@ -209,6 +209,7 @@ class DocumentSeparationDataset(Dataset):
 
     def get_scans_in_next_document(self, inventory, document):
         if self.prob_randomize_document_order > np.random.rand():
+            print("Randomizing document order in next document")
             # Randomize document order
             if self.sample_same_inventory:
                 next_inventory_document = inventory, self.random_choice_except(len(self.image_paths[inventory]), document)
@@ -241,6 +242,7 @@ class DocumentSeparationDataset(Dataset):
 
     def get_scans_in_prev_document(self, inventory, document):
         if self.prob_randomize_document_order > np.random.rand():
+            print("Randomizing document order in previous document")
             # Randomize document order
             if self.sample_same_inventory:
                 prev_inventory_document = inventory, self.random_choice_except(len(self.image_paths[inventory]), document)
@@ -271,13 +273,11 @@ class DocumentSeparationDataset(Dataset):
 
         return scans, prev_inventory_document
 
-    # TODO Finish these
     def get_next_idcs(self, inventory, document, scan):
         next_idcs = []
         next_idcs.extend(self.get_next_scans_in_document(inventory, document, scan))
         next_document = inventory, document
         while len(next_idcs) < self.steps_forward:
-
             next_scans, next_document = self.get_scans_in_next_document(*next_document)
             if next_scans is None:
                 next_idcs.append(None)
@@ -292,7 +292,6 @@ class DocumentSeparationDataset(Dataset):
         while len(prev_idcs) < self.steps_back:
             prev_scans, prev_document = self.get_scans_in_prev_document(*prev_document)
             if prev_scans is None:
-                print("None")
                 prev_idcs = [None] + prev_idcs
                 continue
             prev_idcs = prev_scans + prev_idcs
@@ -301,21 +300,34 @@ class DocumentSeparationDataset(Dataset):
 
     def insert_random_scan(self, idcs):
         if self.prob_random_scan_insert > np.random.rand():
+            print("Inserting random scan")
             middle_position = len(idcs) // 2
             remaining_positions = list(set(range(len(idcs))) - set([middle_position]))
             insert_position = np.random.choice(remaining_positions)
 
             if self.sample_same_inventory:
-                possible_scans = [
-                    self.idx_to_idcs[idx]
-                    for idx in idcs
-                    if self.idx_to_idcs[idx][0] == self.idx_to_idcs[idcs[middle_position]][0]
-                    and self.idx_to_idcs[idx] not in idcs
-                ]
+                inventory, document, _ = idcs[middle_position]
+                possible_documents = set(range(len(self.image_paths[inventory])))
+                possible_documents.remove(document)
+                random_inventory = inventory
+                if len(possible_documents) == 0:
+                    return
+                random_document = np.random.choice(list(possible_documents))
+                possible_scans = list(range(len(self.image_paths[random_inventory][random_document])))
+                random_scan = np.random.choice(possible_scans)
             else:
-                possible_scans = [self.idx_to_idcs[idx] for idx in idcs if self.idx_to_idcs[idx] not in idcs]
+                inventory, document, _ = idcs[middle_position]
+                random_inventory = np.random.choice(list(range(len(self.image_paths))))
+                possible_documents = set(range(len(self.image_paths[random_inventory])))
+                if random_inventory == inventory:
+                    possible_documents.remove(document)
+                if len(possible_documents) == 0:
+                    return
+                random_document = np.random.choice(list(possible_documents))
+                possible_scans = list(range(len(self.image_paths[random_inventory][random_document])))
+                random_scan = np.random.choice(possible_scans)
 
-            idcs[insert_position] = np.random.choice(possible_scans)
+            idcs[insert_position] = (random_inventory, random_document, random_scan)
 
     def __getitem__(self, idx):
         idcs = []
@@ -362,6 +374,7 @@ class DocumentSeparationDataset(Dataset):
                 }
             else:
                 inventory, document, scan = idx
+                image = self.get_image(inventory, document, scan)
 
             prev_document = prev_idx[1] if prev_idx is not None else None
             next_document = next_idx[1] if next_idx is not None else None
@@ -371,19 +384,16 @@ class DocumentSeparationDataset(Dataset):
             middle = not start and not end
 
             target = {
-                "start": start,
-                "middle": middle,
-                "end": end,
+                "start": int(start),
+                "middle": int(middle),
+                "end": int(end),
             }
 
-            image = self.get_image(inventory, document, scan)
             if image is None:
-                image_path = self.image_paths[inventory][document][scan]
+                image_path = None
             else:
                 image_path = self.image_paths[inventory][document][scan]
             text, shape = self.get_text(inventory, document, scan)
-            # FIXME set target based on if scans are in the same document
-            target = {}
 
             image_paths.append(image_path)
             _images.append(image)
@@ -410,7 +420,7 @@ class DocumentSeparationDataset(Dataset):
 
         if self.mode in ["train", "val"]:
             output["targets"] = targets
-            output["idcs"] = idcs
+            output["idcs"] = idcs[1:-1]
 
         return output
 
@@ -430,12 +440,19 @@ if __name__ == "__main__":
                 Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_3097_0079.jpg"),
                 Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_3097_0114.jpg"),
             ],
+        ],
+        [
             [Path("/home/stefank/Downloads/mini-republic/train/NL-HaNA_1.01.02_3097_0137.jpg")],
-        ]
+        ],
     ]
     transform = transforms.Compose([transforms.ToTensor(), transforms.Resize((224, 224))])
     dataset = DocumentSeparationDataset(
-        test_image_paths, transform=transform, prob_randomize_document_order=0, sample_same_inventory=True, wrap_round=False
+        test_image_paths,
+        transform=transform,
+        prob_randomize_document_order=0,
+        prob_random_scan_insert=1,
+        sample_same_inventory=True,
+        wrap_round=False,
     )
     import torch.utils.data
 
@@ -443,22 +460,24 @@ if __name__ == "__main__":
 
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=5, shuffle=True, collate_fn=collate_fn)
     item = next(iter(dataloader))
-    print(item["images"].size())
-    print(item["shapes"].size())
-    print(item["targets"].size())
+    print("Images tensor size:", item["images"].size())
+    print("Shapes tensor size:", item["shapes"].size())
+    print("Targets start tensor size:", item["targets"]["start"].size())
     # Text size is not fixed, so it is a list of lists
-    print(len(item["texts"]), len(item["texts"][0]))
+    print("Text size:", len(item["texts"]), len(item["texts"][0]))
 
     import matplotlib.pyplot as plt
     import numpy as np
 
     for i in range(len(item["images"])):
         for j in range(len(item["images"][i])):
-            print(item["texts"][i][j])
-            print(item["targets"][i][j])
-            print(item["shapes"][i][j])
-            print(item["image_paths"][i][j])
-            print(item["idcs"][i][j])
+            # print(item["texts"][i][j])
+            print("Target start:", item["targets"]["start"][i][j])
+            print("Target middle:", item["targets"]["middle"][i][j])
+            print("Target end:", item["targets"]["end"][i][j])
+            print("Shape:", item["shapes"][i][j])
+            print("Image path:", item["image_paths"][i][j])
+            print("Indices:", item["idcs"][i][j])
             image = item["images"][i][j]
             image = image.permute(1, 2, 0).numpy()
             plt.imshow(image)

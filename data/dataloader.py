@@ -44,6 +44,5 @@ def collate_fn(batch):
         images = torch.stack(images)
     shapes = torch.tensor(shapes)
     targets = {key: torch.tensor(value) for key, value in targets.items()}
-    idcs = torch.tensor(idcs)
 
     return {"images": images, "shapes": shapes, "texts": texts, "targets": targets, "image_paths": image_paths, "idcs": idcs}
