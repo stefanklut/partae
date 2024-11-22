@@ -61,7 +61,7 @@ def get_arguments() -> argparse.Namespace:
     dataset_args.add_argument(
         "--prob_randomize_document_order", help="Probability to randomize document order", type=float, default=1.0
     )
-    dataset_args.add_argument("--prob_random_scan_insert", help="Probability to insert random scan", type=float, default=0.1)
+    dataset_args.add_argument("--prob_random_scan_insert", help="Probability to insert random scan", type=float, default=0.5)
     # dataset_args.add_argument("--sample_same_inventory", help="Sample same inventory", action="store_true")
     dataset_args.add_argument("--sample_all_inventories", help="Sample all inventories", action="store_true")
 
