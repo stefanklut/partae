@@ -20,16 +20,12 @@ class ClassificationModel(pl.LightningModule):
         learning_rate=1e-5,
         optimizer="Adam",
         label_smoothing=0.1,
-        freeze_imagenet=False,
-        freeze_roberta=False,
     ):
         super(ClassificationModel, self).__init__()
         self.learning_rate = learning_rate
 
         self.optimizer = optimizer
         self.label_smoothing = label_smoothing
-        self.freeze_imagenet = freeze_imagenet
-        self.freeze_roberta = freeze_roberta
 
     @override
     def forward(self, x):
