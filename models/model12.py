@@ -279,12 +279,13 @@ class DocumentSeparator(ClassificationModel):
             cross_entropy_middle_loss = F.binary_cross_entropy_with_logits(output_middle_center, targets_middle_center.float())
 
             cosine_loss_total = 0
-            assert encoded_features.shape[1] > 1, "Number of documents must be greater than 1 for cosine loss"
-            for i in range(encoded_features.shape[1] - 1):
-                cosine_loss = self.cosine_with_targets(
-                    encoded_features[:, i], encoded_features[:, i + 1], targets_start[:, i], targets_start[:, i + 1]
-                )
-                cosine_loss_total += cosine_loss
+            if encoded_features.shape[1] > 1:
+                for i in range(encoded_features.shape[1] - 1):
+                    cosine_loss = self.cosine_with_targets(
+                        encoded_features[:, i], encoded_features[:, i + 1], targets_start[:, i], targets_start[:, i + 1]
+                    )
+                    cosine_loss_total += cosine_loss
+
             losses = {
                 "cross_entropy_start_loss": cross_entropy_start_loss,
                 "cross_entropy_end_loss": cross_entropy_end_loss,
