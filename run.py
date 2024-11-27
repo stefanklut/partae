@@ -184,11 +184,11 @@ class SavePredictor(Predictor):
             mode="test",
             transform=self.transform,
             number_of_images=3,
-            wrap_round=False
+            wrap_round=False,
             sample_same_inventory=True,
-            random_scan_insert_chance=0.0,
-            randomize_document_order_chance=0.0,
-            shuffle_doc_chance=0.0,
+            prob_random_scan_insert=0.0,
+            prob_randomize_document_order=0.0,
+            prob_shuffle_document=0.0,
         )
 
         dataloader = torch.utils.data.DataLoader(

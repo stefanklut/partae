@@ -117,7 +117,7 @@ class DocumentSeparationDataset(Dataset):
         )
 
     def scan_in_document(self, inventory, document, scan):
-        return 0 <= scan and scan < len(self.image_paths[inventory][document])
+        return 0 <= scan < len(self.image_paths[inventory][document])
 
     def get_first_document(self, inventory):
         return inventory, 0
@@ -161,7 +161,6 @@ class DocumentSeparationDataset(Dataset):
         self.prev_scans = []
 
         if self.prob_shuffle_document > np.random.rand():
-            print("Shuffling")
             all_scans = self.get_all_scans_in_document(inventory, document)
             if all_scans is None:
                 raise ValueError("Document is out of bounds")
@@ -209,13 +208,21 @@ class DocumentSeparationDataset(Dataset):
 
     def get_scans_in_next_document(self, inventory, document):
         if self.prob_randomize_document_order > np.random.rand():
-            print("Randomizing document order in next document")
             # Randomize document order
             if self.sample_same_inventory:
-                next_inventory_document = inventory, self.random_choice_except(len(self.image_paths[inventory]), document)
+                if len(self.image_paths[inventory]) == 1:
+                    next_inventory_document = None
+                else:
+                    next_inventory_document = inventory, self.random_choice_except(len(self.image_paths[inventory]), document)
             else:
-                next_inventory = self.random_choice_except(len(self.image_paths), inventory)
-                next_inventory_document = next_inventory, np.random.choice(len(self.image_paths[next_inventory]))
+                next_inventory = np.random.choice(len(self.image_paths))
+                if next_inventory == inventory:
+                    if len(self.image_paths[next_inventory]) == 1:
+                        return None, (inventory, document)
+                    next_document = self.random_choice_except(len(self.image_paths[next_inventory]), document)
+                else:
+                    next_document = np.random.choice(len(self.image_paths[next_inventory]))
+                next_inventory_document = next_inventory, next_document
         else:
             # Get next document
             next_inventory_document = self.get_next_document(inventory, document)
@@ -241,14 +248,26 @@ class DocumentSeparationDataset(Dataset):
         return scans, next_inventory_document
 
     def get_scans_in_prev_document(self, inventory, document):
+        # TODO Remove slight bias towards smaller inventories. Sampling inventories first creates this problem. Sample should be uniform
         if self.prob_randomize_document_order > np.random.rand():
-            print("Randomizing document order in previous document")
             # Randomize document order
             if self.sample_same_inventory:
-                prev_inventory_document = inventory, self.random_choice_except(len(self.image_paths[inventory]), document)
+                if len(self.image_paths[inventory]) == 1:
+                    prev_inventory_document = None
+                else:
+                    prev_inventory_document = inventory, self.random_choice_except(len(self.image_paths[inventory]), document)
+
             else:
-                prev_inventory = self.random_choice_except(len(self.image_paths), inventory)
-                prev_inventory_document = prev_inventory, np.random.choice(len(self.image_paths[prev_inventory]))
+                prev_inventory = np.random.choice(len(self.image_paths))
+
+                if prev_inventory == inventory:
+                    if len(self.image_paths[prev_inventory]) == 1:
+                        prev_inventory_document = None
+                        return None, (inventory, document)
+                    prev_document = self.random_choice_except(len(self.image_paths[prev_inventory]), document)
+                else:
+                    prev_document = np.random.choice(len(self.image_paths[prev_inventory]))
+                prev_inventory_document = prev_inventory, prev_document
         else:
             # Get previous document
             prev_inventory_document = self.get_prev_document(inventory, document)
@@ -300,7 +319,6 @@ class DocumentSeparationDataset(Dataset):
 
     def insert_random_scan(self, idcs):
         if self.prob_random_scan_insert > np.random.rand():
-            print("Inserting random scan")
             middle_position = len(idcs) // 2
             remaining_positions = list(set(range(len(idcs))) - set([middle_position]))
             insert_position = np.random.choice(remaining_positions)
@@ -347,10 +365,8 @@ class DocumentSeparationDataset(Dataset):
 
         self.insert_random_scan(idcs)
 
-        # TODO: Move to separate function
-        # insert random scan
+        # print(idcs)
 
-        print(idcs)
         # From the obtained indices, get the images, texts and targets
         targets = defaultdict(list)
         _images = []
@@ -376,11 +392,13 @@ class DocumentSeparationDataset(Dataset):
                 inventory, document, scan = idx
                 image = self.get_image(inventory, document, scan)
 
+            prev_inventory = prev_idx[0] if prev_idx is not None else None
+            next_inventory = next_idx[0] if next_idx is not None else None
             prev_document = prev_idx[1] if prev_idx is not None else None
             next_document = next_idx[1] if next_idx is not None else None
 
-            start = prev_document is None or prev_document != document
-            end = next_document is None or next_document != document
+            start = prev_document is None or (prev_document != document or prev_inventory != inventory)
+            end = next_document is None or (next_document != document or next_inventory != inventory)
             middle = not start and not end
 
             target = {
