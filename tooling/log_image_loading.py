@@ -27,6 +27,10 @@ def collate_fn(batch):
 
 
 class LogDataset(Dataset):
+    """
+    Dataset that logs the success of loading an image
+    """
+
     def __init__(self, image_paths):
         super(Dataset, self).__init__()
         self.image_paths = image_paths
@@ -34,7 +38,16 @@ class LogDataset(Dataset):
     def __len__(self):
         return len(self.image_paths)
 
-    def load_image(self, image_path):
+    def load_image(self, image_path: Path) -> dict:
+        """
+        Load an image and return the success of loading the image
+
+        Args:
+            image_path (Path): Path to the image
+
+        Returns:
+            dict: Dictionary containing the path to the image and the success of loading the thumbnail and the image
+        """
         # Check if thumbnail exists
 
         failed_thumbnail = False

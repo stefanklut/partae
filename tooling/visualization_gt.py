@@ -74,7 +74,16 @@ def on_close(event):
 
 
 @functools.lru_cache(maxsize=IMAGE_PRELOAD * 2)
-def get_image(image_path: str) -> Optional[np.ndarray]:
+def get_image(image_path: str | Path) -> Optional[np.ndarray]:
+    """
+    Load an image and return the success of loading the image
+
+    Args:
+        image_path (str): Path to the image
+
+    Returns:
+        Optional[np.ndarray]: Image as a numpy array or None if the image could not be loaded
+    """
     image_path = Path(image_path)
 
     # Check if thumbnail exists
@@ -96,6 +105,18 @@ def get_image(image_path: str) -> Optional[np.ndarray]:
 
 
 def scan_id_to_inventory_number(scan_id: str) -> str:
+    """
+    Get the inventory number from a scan id
+
+    Args:
+        scan_id (str): Scan id
+
+    Raises:
+        ValueError: If the scan id does not match the expected format
+
+    Returns:
+        str: Inventory number
+    """
     if check := re.match(r"(.+)_(.+)_(\d+)(_deelopname\d+)?", scan_id):
         inventory_number_file = check.group(2)
         return inventory_number_file
@@ -104,6 +125,15 @@ def scan_id_to_inventory_number(scan_id: str) -> str:
 
 
 def json_to_scan_label(path: Path) -> tuple[Path, bool]:
+    """
+    Load a json file and return the scan id and the result
+
+    Args:
+        path (Path): Path to the json file
+
+    Returns:
+        tuple[Path, bool]: Path to the image and the result
+    """
     with path.open(mode="r") as f:
         data = json.load(f)
         is_first_page = data["isFirstPage"]
@@ -121,6 +151,12 @@ def json_to_scan_label(path: Path) -> tuple[Path, bool]:
 
 
 def invert_json_is_first_page(path: Path) -> None:
+    """
+    Invert the is first page in the json file. Use this to correct the ground truth
+
+    Args:
+        path (Path): Path to the json file
+    """
     with path.open(mode="r") as f:
         data = json.load(f)
         data["isFirstPage"] = not data["isFirstPage"]
@@ -207,16 +243,15 @@ def main(args) -> None:
         while _keypress_result is None:
             plt.waitforbuttonpress()
         if _keypress_result == "forward":
-            # print(i+1, f"{inputs['original_file_name']}")
             i += 1
         elif _keypress_result == "back":
-            # print(i+1, f"{inputs['original_file_name']}: DELETE")
             i -= 1
         elif _keypress_result == "forward100":
             i += 100
         elif _keypress_result == "back100":
             i -= 100
         elif _keypress_result == "flip":
+            # Correct the ground truth
             invert_json_is_first_page(json_path)
 
     pool.shutdown()

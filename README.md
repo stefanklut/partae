@@ -84,6 +84,8 @@ docker build -t docker.separation $tmp_dir
 ```
 </details>
 
+<!-- TODO Update the training and inference section -->
+
 ## Training
 
 The model is trained using the `main.py` script. The model reads a xlsx file (`-x/--xlsx`) with the following columns: "Start of document" or "URL nieuw document op volgorde". It then reads the images responding to the URLs in the column matching inventory number. This is done using the `-t/--train` parameters which requires the path to the images or a directory containing the images. See the `-h/--help` for more information.

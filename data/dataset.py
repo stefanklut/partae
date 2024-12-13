@@ -21,6 +21,10 @@ from utils.path_utils import check_path_accessible, image_path_to_xml_path
 
 
 class DocumentSeparationDataset(Dataset):
+    """
+    A PyTorch Dataset for document separation. The dataset returns a sequence of images, texts and targets.
+    """
+
     def __init__(
         self,
         image_paths: Sequence[Sequence[Sequence[Path]]],
@@ -41,9 +45,8 @@ class DocumentSeparationDataset(Dataset):
         self.idx_to_idcs = {}
         idx = 0
         self.doc_lengths = defaultdict(list)
-        self.prob_shuffle_document = prob_shuffle_document
-        self.prob_random_scan_insert = prob_random_scan_insert
 
+        # Check if all images are accessible, and create a mapping from idx to inventory, document and scan
         total_scans = sum(sum(len(doc) for doc in inventory) for inventory in image_paths)
         with tqdm(total=total_scans, desc="Checking files") as pbar:
             idx = 0
@@ -59,17 +62,23 @@ class DocumentSeparationDataset(Dataset):
                         idx += 1
                         pbar.update()
 
+        # Set the length of the dataset
         self.len = idx
 
+        # Calculate the number of steps back and forward
         assert number_of_images > 0, "Number of images must be greater than 0"
         self.number_of_images = number_of_images
         self.steps_back = (self.number_of_images // 2) + 1
         self.steps_forward = self.number_of_images + 1 - self.steps_back
 
+        # Initialize the next and previous scans, these are used in the shuffling of the current document
         self.next_scans = []
         self.prev_scans = []
 
+        # Augmentation parameters
+        self.prob_shuffle_document = prob_shuffle_document
         self.prob_randomize_document_order = prob_randomize_document_order
+        self.prob_random_scan_insert = prob_random_scan_insert
         self.sample_same_inventory = sample_same_inventory
         self.wrap_round = wrap_round
         self.transform = transform
@@ -78,7 +87,18 @@ class DocumentSeparationDataset(Dataset):
         return self.len
 
     @functools.lru_cache(maxsize=16)
-    def get_image(self, inventory, document, scan):
+    def get_image(self, inventory: int, document: int, scan: int) -> Optional[Image.Image]:
+        """
+        Get the image at the given inventory, document and scan. If the image is not found, None is returned. Uses lru_cache to cache the images.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+            scan (int): The scan index
+
+        Returns:
+            Optional[Image.Image]: The image at the given inventory, document and scan
+        """
         image_path: Path = self.image_paths[inventory][document][scan]
 
         # Check if thumbnail exists
@@ -100,13 +120,35 @@ class DocumentSeparationDataset(Dataset):
 
     @functools.lru_cache(maxsize=16)
     def get_text(self, inventory, document, scan):
+        """
+        Get the text at the given inventory, document and scan. Uses lru_cache to cache the text.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+            scan (int): The scan index
+
+        Returns:
+            Tuple[Dict[str, str], Tuple[int, int]]: The text at the given inventory, document and scan, and the shape of the image as found in the page xml
+        """
         xml_path = image_path_to_xml_path(self.image_paths[inventory][document][scan])
         page_data = PageData.from_file(xml_path)
         text = page_data.get_transcription_dict()
         shape = page_data.get_size()
         return text, shape
 
-    def is_out_of_bounds(self, inventory, document, scan):
+    def is_out_of_bounds(self, inventory: int, document: int, scan: int) -> bool:
+        """
+        Check if the given inventory, document and scan is out of bounds.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+            scan (int): The scan index
+
+        Returns:
+            bool: True if the inventory, document or scan is out of bounds, False otherwise
+        """
         return (
             inventory < 0
             or document < 0
@@ -116,47 +158,149 @@ class DocumentSeparationDataset(Dataset):
             or scan >= len(self.image_paths[inventory][document])
         )
 
-    def scan_in_document(self, inventory, document, scan):
+    def scan_in_document(self, inventory: int, document: int, scan: int) -> bool:
+        """
+        Checks if the scan index is within the valid range for the specified document in the inventory.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+            scan (int): The scan index
+
+        Returns:
+            bool: True if the scan index is valid, False otherwise.
+        """
+
         return 0 <= scan < len(self.image_paths[inventory][document])
 
-    def get_first_document(self, inventory):
+    def get_first_document(self, inventory: int) -> tuple[int, int]:
+        """
+        Retrieve the first document in the given inventory.
+
+        Args:
+            inventory (int): The inventory index
+
+        Returns:
+            tuple[int, int]: The inventory and document index of the first document
+        """
         return inventory, 0
 
-    def get_last_document(self, inventory):
+    def get_last_document(self, inventory: int) -> tuple[int, int]:
+        """
+        Retrieve the last document for a given inventory.
+
+        Args:
+            inventory (int): The inventory index
+
+        Returns:
+            tuple[int, int]: A tuple containing the inventory index and the index of the last document.
+        """
+
         return inventory, len(self.image_paths[inventory]) - 1
 
-    def get_next_document(self, inventory, document):
+    def get_next_document(self, inventory: int, document: int) -> Optional[tuple[int, int]]:
+        """
+        Retrieve the next document in the inventory.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+
+        Returns:
+            Optional[tuple[int, int]]: A tuple containing the inventory index and the index of the next document. None if the next document is out of bounds.
+        """
         if self.is_out_of_bounds(inventory, document + 1, 0):
             return None
         return inventory, document + 1
 
-    def get_prev_document(self, inventory, document):
+    def get_prev_document(self, inventory: int, document: int) -> Optional[tuple[int, int]]:
+        """
+        Retrieve the previous document in the inventory.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+
+        Returns:
+            Optional[tuple[int, int]]: A tuple containing the inventory index and the index of the previous document. None if the previous document is out of bounds.
+        """
         if self.is_out_of_bounds(inventory, document - 1, 0):
             return None
         return inventory, document - 1
 
-    def get_first_inventory(self):
+    def get_first_inventory(self) -> int:
+        """
+        Get the index of the first inventory.
+
+        Returns:
+            int: The index of the first inventory
+        """
         return 0
 
-    def get_last_inventory(self):
+    def get_last_inventory(self) -> int:
+        """
+        Get the index of the last inventory.
+
+        Returns:
+            int: The index of the last inventory
+        """
         return len(self.image_paths) - 1
 
-    def get_next_inventory(self, inventory):
+    def get_next_inventory(self, inventory: int) -> Optional[int]:
+        """
+        Get the index of the next inventory.
+
+        Args:
+            inventory (int): The inventory index
+
+        Returns:
+            Optional[int]: The index of the next inventory. None if the next inventory is out of bounds.
+        """
         if self.is_out_of_bounds(inventory + 1, 0, 0):
             return None
         return inventory + 1
 
-    def get_prev_inventory(self, inventory):
+    def get_prev_inventory(self, inventory: int) -> Optional[int]:
+        """
+        Get the index of the previous inventory.
+
+        Args:
+            inventory (int): The inventory index
+
+        Returns:
+            Optional[int]: The index of the previous inventory. None if the previous inventory is out of bounds.
+        """
         if self.is_out_of_bounds(inventory - 1, 0, 0):
             return None
         return inventory - 1
 
-    def get_all_scans_in_document(self, inventory, document):
+    def get_all_scans_in_document(self, inventory: int, document: int) -> list[tuple[int, int, int]]:
+        """
+        Get all scans in the given document in a given inventory as a list of tuples.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+
+        Returns:
+            list[tuple[int, int, int]]: A list of tuples containing the inventory, document and scan indices. Empty list if the document is out of bounds.
+        """
         if self.is_out_of_bounds(inventory, document, 0):
             return []
         return [(inventory, document, i) for i in range(len(self.image_paths[inventory][document]))]
 
-    def fill_next_prev_scans(self, inventory, document, scan):
+    def fill_next_prev_scans(self, inventory: int, document: int, scan: int) -> None:
+        """
+        Fill the next and previous scans for the given inventory, document and scan. The next and previous scans are used in the shuffling of the current document.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+            scan (int): The scan index
+
+        Raises:
+            ValueError: If the document is out of bounds
+        """
         self.next_scans = []
         self.prev_scans = []
 
@@ -181,14 +325,36 @@ class DocumentSeparationDataset(Dataset):
                 elif after_scan:
                     self.next_scans.append(all_scans[i])
 
-    def get_next_scans_in_document(self, inventory, document, scan):
+    def get_next_scans_in_document(self, inventory: int, document: int, scan: int) -> list[tuple[int, int, int]]:
+        """
+        Get the next scans in the given document in the given inventory. If the next scans are already filled, the filled scans are returned.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+            scan (int): The scan index
+
+        Returns:
+            list[tuple[int, int, int]]: A list of tuples containing the inventory, document and scan indices of the next scans
+        """
         if self.next_scans or self.prev_scans:
             return self.next_scans
         assert self.scan_in_document(inventory, document, scan), "Scan is out of bounds"
         output = [(inventory, document, i) for i in range(scan + 1, len(self.image_paths[inventory][document]))]
         return output
 
-    def get_prev_scans_in_document(self, inventory, document, scan):
+    def get_prev_scans_in_document(self, inventory: int, document: int, scan: int) -> list[tuple[int, int, int]]:
+        """
+        Get the previous scans in the given document in the given inventory. If the previous scans are already filled, the filled scans are returned.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+            scan (int): The scan index
+
+        Returns:
+            list[tuple[int, int, int]]: A list of tuples containing the inventory, document and scan indices of the previous scans
+        """
         if self.next_scans or self.prev_scans:
             return self.prev_scans
         assert self.scan_in_document(inventory, document, scan), f"Scan is out of bounds {inventory} {document} {scan}"
@@ -197,7 +363,19 @@ class DocumentSeparationDataset(Dataset):
 
     # https://stackoverflow.com/a/64015315
     @staticmethod
-    def random_choice_except(high: int, excluding: int, size=None, replace=True):
+    def random_choice_except(high: int, excluding: int, size=None, replace=True) -> np.ndarray | int:
+        """
+        Generate random values in the range [0, high-1) without the value excluding
+
+        Args:
+            high (int): The upper bound of the range
+            excluding (int): The value to exclude
+            size (int, optional): The number of random values to generate. Defaults to None.
+            replace (bool, optional): Whether to sample with replacement. Defaults to True.
+
+        Returns:
+            np.ndarray | int: The random values in the range [0, high-1) without the value excluding
+        """
         assert isinstance(high, int), "high must be an integer"
         assert isinstance(excluding, int), "excluding must be an integer"
         assert excluding < high, "excluding value must be less than high"
@@ -206,7 +384,19 @@ class DocumentSeparationDataset(Dataset):
         # shift values to avoid the excluded number
         return choices + (choices >= excluding)
 
-    def get_scans_in_next_document(self, inventory, document):
+    def get_scans_in_next_document(
+        self, inventory: int, document: int
+    ) -> tuple[Optional[list[tuple[int, int, int]]], tuple[int, int]]:
+        """
+        Get the scans in the next document in the given inventory and document.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+
+        Returns:
+            list[tuple[int, int, int]]: A list of tuples containing the inventory, document and scan indices of the scans in the next document
+        """
         if self.prob_randomize_document_order > np.random.rand():
             # Randomize document order
             if self.sample_same_inventory:
@@ -247,7 +437,9 @@ class DocumentSeparationDataset(Dataset):
 
         return scans, next_inventory_document
 
-    def get_scans_in_prev_document(self, inventory, document):
+    def get_scans_in_prev_document(
+        self, inventory: int, document: int
+    ) -> tuple[Optional[list[tuple[int, int, int]]], tuple[int, int]]:
         # TODO Remove slight bias towards smaller inventories. Sampling inventories first creates this problem. Sample should be uniform
         if self.prob_randomize_document_order > np.random.rand():
             # Randomize document order
@@ -292,7 +484,18 @@ class DocumentSeparationDataset(Dataset):
 
         return scans, prev_inventory_document
 
-    def get_next_idcs(self, inventory, document, scan):
+    def get_next_idcs(self, inventory: int, document: int, scan: int) -> list[tuple[int, int, int] | None]:
+        """
+        Get the next indices in the dataset.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+            scan (int): The scan index
+
+        Returns:
+            list[tuple[int, int, int]]: A list of tuples containing the inventory, document and scan indices of the next scans
+        """
         next_idcs = []
         next_idcs.extend(self.get_next_scans_in_document(inventory, document, scan))
         next_document = inventory, document
@@ -304,7 +507,18 @@ class DocumentSeparationDataset(Dataset):
             next_idcs.extend(next_scans)
         return next_idcs[: self.steps_forward]
 
-    def get_previous_idcs(self, inventory, document, scan):
+    def get_previous_idcs(self, inventory: int, document: int, scan: int) -> list[tuple[int, int, int] | None]:
+        """
+        Get the previous indices in the dataset.
+
+        Args:
+            inventory (int): The inventory index
+            document (int): The document index
+            scan (int): The scan index
+
+        Returns:
+            list[tuple[int, int, int]]: A list of tuples containing the inventory, document and scan indices of the previous scans
+        """
         prev_idcs = []
         prev_idcs.extend(self.get_prev_scans_in_document(inventory, document, scan))
         prev_document = inventory, document
@@ -317,7 +531,13 @@ class DocumentSeparationDataset(Dataset):
 
         return prev_idcs[-self.steps_back :]
 
-    def insert_random_scan(self, idcs):
+    def insert_random_scan(self, idcs: list[tuple[int, int, int]]) -> None:
+        """
+        Insert a random scan somewhere in the list of indices. The random scan cannot be inserted in the middle of the list.
+
+        Args:
+            idcs (list[tuple[int, int, int]]): A list of tuples containing the inventory, document and scan indices
+        """
         if self.prob_random_scan_insert > np.random.rand():
             middle_position = len(idcs) // 2
             remaining_positions = list(set(range(len(idcs))) - set([middle_position]))
@@ -347,7 +567,16 @@ class DocumentSeparationDataset(Dataset):
 
             idcs[insert_position] = (random_inventory, random_document, random_scan)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> dict:
+        """
+        Get the images, texts and targets for the given index.
+
+        Args:
+            idx (int): The index of the dataset
+
+        Returns:
+            dict: A dictionary containing the images, texts and targets (if in train or val mode) for the given index
+        """
         idcs = []
         # Get the current inventory, document and scan
         inventory, document, scan = self.idx_to_idcs[idx]
@@ -377,6 +606,7 @@ class DocumentSeparationDataset(Dataset):
             prev_idx = idcs[i]
             idx = idcs[i + 1]
             next_idx = idcs[i + 2]
+            # If the index is out of bounds, set the image to None and the text to an empty string
             if idx is None:
                 image = None
                 shape = (0, 0)
@@ -392,11 +622,15 @@ class DocumentSeparationDataset(Dataset):
                 inventory, document, scan = idx
                 image = self.get_image(inventory, document, scan)
 
+            # Set the target based on the previous and next indices
             prev_inventory = prev_idx[0] if prev_idx is not None else None
             next_inventory = next_idx[0] if next_idx is not None else None
             prev_document = prev_idx[1] if prev_idx is not None else None
             next_document = next_idx[1] if next_idx is not None else None
 
+            # If the previous document is None, the current scan is the first scan of a document.
+            # Otherwise, if the previous document is different from the current document, the current scan is the first scan in a document.
+            # The same logic applies to determining if the current scan is the last scan in a document, but done by comparing with the next document.
             start = prev_document is None or (prev_document != document or prev_inventory != inventory)
             end = next_document is None or (next_document != document or next_inventory != inventory)
             middle = not start and not end
@@ -407,12 +641,14 @@ class DocumentSeparationDataset(Dataset):
                 "end": int(end),
             }
 
+            # If the image did not load or is out of bounds, set the image path to None
             if image is None:
                 image_path = None
             else:
                 image_path = self.image_paths[inventory][document][scan]
             text, shape = self.get_text(inventory, document, scan)
 
+            # Append the image, text, target and image path to the lists
             image_paths.append(image_path)
             _images.append(image)
             shapes.append(shape)
@@ -421,6 +657,7 @@ class DocumentSeparationDataset(Dataset):
                 for key, value in target.items():
                     targets[key].append(value)
 
+        # Transform the images
         images = []
         if self.transform is None:
             self.transform = transforms.Compose([transforms.ToTensor()])

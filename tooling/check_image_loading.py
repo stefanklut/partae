@@ -20,13 +20,22 @@ def get_arguments():
 
 
 def main(args):
+    """
+    Check if image files will load
+
+    Args:
+        args: Arguments from the command line
+    """
     stats = defaultdict(lambda: defaultdict(int))
+
+    # load all image files
     file_paths = get_file_paths(args.input, formats=supported_image_formats)
 
     for file_path in tqdm(file_paths):
         extension = file_path.suffix.lower()
         stats[extension]["total"] += 1
 
+        # Check if the image will load
         ImageFile.LOAD_TRUNCATED_IMAGES = False
         try:
             image = Image.open(file_path)
@@ -35,6 +44,7 @@ def main(args):
             if np.all(np.asarray(image) == 0):
                 stats[extension]["blank"] += 1
         except OSError:
+            # Try to load the image with truncated images
             stats[extension]["failure"] += 1
 
             ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -47,6 +57,7 @@ def main(args):
             except OSError:
                 stats[extension]["failure_truncated"] += 1
 
+    # Print the stats
     for extension in stats:
         print(f"Extension: {extension}")
         for key in stats[extension]:

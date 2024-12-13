@@ -134,10 +134,16 @@ class PageData:
         return self.size
 
     def get_coords(self, element) -> np.ndarray:
+        """
+        Get the coordinates of the element
+        """
         str_coords = element.findall("".join(["./", self.base, "Coords"]))[0].attrib.get("points").split()
         return np.array([i.split(",") for i in str_coords]).astype(np.int32)
 
     def get_baseline_coords(self, element) -> np.ndarray:
+        """
+        Get the coordinates of the baseline of the element
+        """
         str_coords = element.findall("".join(["./", self.base, "Baseline"]))[0].attrib.get("points").split()
         return np.array([i.split(",") for i in str_coords]).astype(np.int32)
 

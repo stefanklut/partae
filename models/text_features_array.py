@@ -10,6 +10,10 @@ from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
 
 
 class LazyLinearBlock(nn.Module):
+    """
+    Module to apply a linear layer followed by a ReLU activation and dropout
+    """
+
     def __init__(self, out_features, dropout=0.0):
         super(LazyLinearBlock, self).__init__()
         self.fc = nn.LazyLinear(out_features)
@@ -23,6 +27,10 @@ class LazyLinearBlock(nn.Module):
 
 
 class TextEncoder(nn.Module):
+    """
+    Module to encode text using a pre-trained RoBERTa model
+    """
+
     def __init__(self, channels=512, merge_to_batch=True):
         super(TextEncoder, self).__init__()
         self.merge_to_batch = merge_to_batch
@@ -40,7 +48,16 @@ class TextEncoder(nn.Module):
     def device(self):
         return next(self.parameters()).device
 
-    def encode_text(self, text: list[str]):
+    def encode_text(self, text: list[str]) -> torch.Tensor:
+        """
+        Encode a list of text strings
+
+        Args:
+            text (list[str]): List of text strings
+
+        Returns:
+            torch.Tensor: Encoded text
+        """
         # Tokenize the text
         encoded_text = self.tokenizer(text, padding=True, truncation=True, return_tensors="pt")  # (B, S)
         encoded_text = {key: tensor.to(self.device) for key, tensor in encoded_text.items()}
@@ -57,6 +74,10 @@ class TextEncoder(nn.Module):
 
 
 class TextFeaturesArray(nn.Module):
+    """
+    Module to create an array of text features from a list of text lines
+    """
+
     def __init__(
         self,
         channels,

@@ -14,6 +14,12 @@ def get_arguments():
 
 
 def main(args):
+    """
+    Method from splitting data into a file. The file will have a list of directories from the input folder.
+
+    Args:
+        args: Arguments from the command line
+    """
     input_path = Path(args.input)
     output_path = Path(args.output)
 

@@ -89,11 +89,29 @@ images_processed_counter = Counter("images_processed", "Total number of images p
 exception_predict_counter = Counter("exception_predict", "Exception thrown in predict() function")
 
 
-def get_middle_scan(y: np.ndarray):
+def get_middle_scan(y: np.ndarray) -> np.ndarray:
+    """
+    Get the middle scan of a 2D array
+
+    Args:
+        y (np.ndarray): Array to get the middle scan of
+
+    Returns:
+        np.ndarray: Middle scan of the array
+    """
     return y[:, y.shape[1] // 2]
 
 
-def get_middle_path(paths: list[list[Path]]):
+def get_middle_path(paths: list[list[Path]]) -> Path:
+    """
+    Get the middle path of a list of paths
+
+    Args:
+        paths (list[list[Path]]): List of paths to get the middle path of
+
+    Returns:
+        Path: Middle path of the list
+    """
     return paths[0][len(paths[0]) // 2]
 
 
@@ -263,6 +281,7 @@ def predict() -> tuple[Response, int]:
         ]
     )
 
+    # Load the multiple images
     _images = []
     image_names = []
     for post_file_i in post_file:
@@ -286,6 +305,7 @@ def predict() -> tuple[Response, int]:
 
         _images.append(image_data)
 
+    # Load the multiple XML files
     texts = []
     for post_text_i in post_text:
         if post_text_i.filename:
@@ -304,12 +324,14 @@ def predict() -> tuple[Response, int]:
 
         texts.append(text)
 
+    # Check if the image was send correctly. If the image is empty, the text should also be empty
     for image, text in zip(_images, texts):
         if image is None and not text:
             continue
         if image is None and text:
             abort_with_info(400, "Empty image was send with text", response_info)
 
+    # Find the shapes of the images
     shapes = []
     for image in _images:
         if image is None:
@@ -319,6 +341,7 @@ def predict() -> tuple[Response, int]:
 
     _images = transform(_images)
 
+    # Pad the images to the same size
     max_shape = np.max([image.size()[-2:] for image in _images if image is not None], axis=0)
 
     for i in range(len(_images)):
@@ -330,6 +353,7 @@ def predict() -> tuple[Response, int]:
             value=0,
         )
 
+    # Add batch dimension
     images = torch.stack(_images).unsqueeze(0)
     shapes = torch.tensor(shapes).unsqueeze(0)
 

@@ -35,6 +35,11 @@ def get_arguments() -> argparse.Namespace:
 
 
 def main(args: argparse.Namespace):
+    """
+    Evaluate the model, based on the validation set given in xlsx file
+    """
+
+    # TODO Update to also use the json format of GT
     val_paths = get_file_paths(args.val, formats=supported_image_formats)
     xlsx_file = Path(args.xlsx)
     if not xlsx_file.exists():

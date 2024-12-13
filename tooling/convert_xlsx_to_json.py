@@ -21,11 +21,20 @@ def get_arguments() -> argparse.Namespace:
 
 
 def main(args):
+    """
+    Convert xlsx ground truth to json ground truth
+
+    Args:
+        args: Arguments from the command line
+    """
     paths = get_file_paths(args.input, supported_image_formats)
+
+    # Get all documents from the xlsx file
     all_documents = link_with_paths(args.xlsx, paths)
 
     output_path = Path(args.output)
 
+    # Loop over all documents and create a json file for each image
     for inventory in all_documents:
         for document in inventory:
             for i, image in enumerate(document):
@@ -33,6 +42,8 @@ def main(args):
                 output_path_image = output_path.joinpath(inventory, f"{image.stem}.json")
 
                 output_path_image.parent.mkdir(parents=True, exist_ok=True)
+
+                # A scan is the first page if it is the first image in the document
                 if i == 0:
                     is_first_page = True
                 else:

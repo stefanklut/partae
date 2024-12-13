@@ -64,7 +64,16 @@ def on_close(event):
 
 
 @functools.lru_cache(maxsize=IMAGE_PRELOAD * 2)
-def get_image(image_path: str) -> Optional[np.ndarray]:
+def get_image(image_path: str | Path) -> Optional[np.ndarray]:
+    """
+    Load an image and return the success of loading the image
+
+    Args:
+        image_path (str): Path to the image
+
+    Returns:
+        Optional[np.ndarray]: Image as a numpy array or None if the image could not be loaded
+    """
     image_path = Path(image_path)
 
     # Check if thumbnail exists
@@ -172,10 +181,8 @@ def main(args) -> None:
             bad_results[i] = not bad_results[i]
             delete_results[i] = False
         elif _keypress_result == "forward":
-            # print(i+1, f"{inputs['original_file_name']}")
             i += 1
         elif _keypress_result == "back":
-            # print(i+1, f"{inputs['original_file_name']}: DELETE")
             i -= 1
 
     if args.output and (delete_results.any() or bad_results.any()):

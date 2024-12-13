@@ -21,10 +21,13 @@ def collate_fn(batch):
         image_paths.append(item["image_paths"])
         idcs.append(item["idcs"])
 
+    # If all images are None, images are zeros
     if all(image is None for sub_images in _images for image in sub_images):
-        # keep shape
+        # Keep the batch size and number of images
         batch_size = len(batch)
         images_size = len(_images[0])
+
+        # Create a tensor of zeros
         images = torch.zeros((batch_size, images_size, 3, 1, 1))
     else:
         # Pad to the same size
@@ -42,6 +45,7 @@ def collate_fn(batch):
             images.append(torch.stack(_images[i]))
 
         images = torch.stack(images)
+
     shapes = torch.tensor(shapes)
     targets = {key: torch.tensor(value) for key, value in targets.items()}
 

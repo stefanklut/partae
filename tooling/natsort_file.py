@@ -6,7 +6,7 @@ from natsort import natsorted
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="Split data")
-    parser.add_argument("-i", "--input", help="Input folder", type=str, required=True)
+    parser.add_argument("-i", "--input", help="Input file", type=str, required=True)
     parser.add_argument("-o", "--output", help="Output folder", type=str)
 
     args = parser.parse_args()
@@ -14,6 +14,12 @@ def get_arguments():
 
 
 def main(args):
+    """
+    Read a file and sort the lines in natural order
+
+    Args:
+        args: Arguments from the command line
+    """
     input_path = Path(args.input)
     if args.output is None:
         output_path = input_path

@@ -26,6 +26,11 @@ def multiplicative(epoch: int) -> float:
 
 # Adapted from BackboneFinetuning in pytorch-lightning.callbacks
 class NamedBackboneFinetuning(BaseFinetuning):
+    """
+    This callback is a modification of the BackboneFinetuning callback from pytorch-lightning.
+    It allows to unfreeze a part of a model at a specific epoch and to apply a learning rate schedule.
+    The main difference is that it allows to target a specific module in the model by its name.
+    """
 
     def __init__(
         self,
@@ -119,6 +124,15 @@ class NamedBackboneFinetuning(BaseFinetuning):
         self.freeze(self.find_named_module(pl_module), train_bn=self.train_bn)
 
     def find_named_params_optimizer(self, optimizer: Optimizer) -> list[Dict[str, Any]]:
+        """
+        Find the param_groups in the optimizer that are associated with the named module
+
+        Args:
+            optimizer (Optimizer): The optimizer to search in
+
+        Returns:
+            list[Dict[str, Any]]: The param_groups associated with the named module
+        """
         param_groups = [param_group for param_group in optimizer.param_groups if param_group.get("name") == {self.name}]
         return param_groups
 
@@ -129,6 +143,7 @@ class NamedBackboneFinetuning(BaseFinetuning):
         if self.unfreeze_at_epoch < 0:
             return
         elif epoch == self.unfreeze_at_epoch:
+            # When the epoch is the unfreeze epoch, unfreeze the named module and add it to the optimizer
             current_lr = optimizer.param_groups[0]["lr"]
             initial_lr = self.initial_lr if self.initial_lr is not None else current_lr * self.initial_ratio_lr
             self.previous_lr = initial_lr
@@ -144,6 +159,7 @@ class NamedBackboneFinetuning(BaseFinetuning):
                 log.info(f"Current lr: {round(current_lr, self.rounding)}, " f"Backbone lr: {round(initial_lr, self.rounding)}")
 
         elif epoch > self.unfreeze_at_epoch:
+            # When the epoch is after the unfreeze epoch, apply the learning rate schedule
             current_lr = optimizer.param_groups[0]["lr"]
             next_current_lr = self.lambda_func(epoch + 1) * self.previous_lr
             next_current_lr = current_lr if (self.should_align and next_current_lr > current_lr) else next_current_lr

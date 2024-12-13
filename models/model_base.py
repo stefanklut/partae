@@ -15,6 +15,10 @@ from torchvision import datasets, transforms
 
 
 class ClassificationModel(pl.LightningModule):
+    """
+    Base class for classification models. Implements the training, validation, and testing steps.
+    """
+
     def __init__(
         self,
         learning_rate=1e-5,
@@ -27,15 +31,36 @@ class ClassificationModel(pl.LightningModule):
         self.optimizer = optimizer
         self.label_smoothing = label_smoothing
 
-    @override
     def forward(self, x):
+        """
+        Override this method to define the forward pass of the model.
+        """
         raise NotImplementedError
 
     @staticmethod
     def get_middle(y):
+        """
+        Get the middle element of a tensor along the second dimension.
+
+        Args:
+            y (tensor): Input tensor
+
+        Returns:
+            tensor: Middle element of the tensor
+        """
         return y[:, y.shape[1] // 2]
 
     def training_step(self, batch, batch_idx):
+        """
+        Training step of the model.
+
+        Args:
+            batch (dict): Dictionary containing the batch data
+            batch_idx (int): Index of the batch
+
+        Returns:
+            tensor: Loss value
+        """
         B = batch["images"].shape[0]
 
         _, losses, metrics = self(batch)
@@ -52,6 +77,13 @@ class ClassificationModel(pl.LightningModule):
         return total_loss
 
     def validation_step(self, batch, batch_idx):
+        """
+        Validation step of the model.
+
+        Args:
+            batch (dict): Dictionary containing the batch data
+            batch_idx (int): Index of the batch
+        """
         B = batch["images"].shape[0]
 
         _, losses, metrics = self(batch)
@@ -65,6 +97,13 @@ class ClassificationModel(pl.LightningModule):
             self.log(f"val_{metric}", metrics[metric], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
 
     def test_step(self, batch, batch_idx):
+        """
+        Test step of the model.
+
+        Args:
+            batch (dict): Dictionary containing the batch data
+            batch_idx (int): Index of the batch
+        """
         B = batch["images"].shape[0]
 
         _, losses, metrics = self(batch)
@@ -78,6 +117,9 @@ class ClassificationModel(pl.LightningModule):
             self.log(f"test_{metric}", metrics[metric], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=B)
 
     def configure_optimizers(self):
+        """
+        Configure the optimizer for the model.
+        """
 
         if self.optimizer == "Adam":
             optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate)

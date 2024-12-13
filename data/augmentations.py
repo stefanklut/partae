@@ -7,13 +7,11 @@ from PIL.Image import Image
 
 
 class _ApplyToList(torch.nn.Module):
-    def __init__(self, fn):
-        """
-        Apply a function to a list of tensors
+    """
+    Apply a transformation to a list of tensors
+    """
 
-        Args:
-            fn (function): _description_
-        """
+    def __init__(self, fn):
         super(_ApplyToList, self).__init__()
         self.fn = fn
 
@@ -30,14 +28,24 @@ class _ApplyToList(torch.nn.Module):
 
 
 class PadToMaxSize(_ApplyToList):
+    """
+    Apply padding to a list of tensors to make them the same size
+    """
+
     def __init__(self):
-        """
-        Apply padding to a list of tensors to make them the same size
-        """
         fn = None
         super(PadToMaxSize, self).__init__(fn)
 
     def pil_pad(self, image_list: list[Optional[Image]]) -> list[Optional[Image]]:
+        """
+        Pad a list of PIL images to make them the same size
+
+        Args:
+            image_list (list[Optional[Image]]): the list of images to pad
+
+        Returns:
+            list[Optional[Image]]: the list of padded images
+        """
         height, width = np.max([image.size for image in image_list if image is not None], axis=0)
         for i in range(len(image_list)):
             if image_list[i] is None:
@@ -53,6 +61,15 @@ class PadToMaxSize(_ApplyToList):
         return image_list
 
     def tensor_pad(self, tensor_list: list[Optional[torch.Tensor]]) -> list[Optional[torch.Tensor]]:
+        """
+        Pad a list of tensors to make them the same size
+
+        Args:
+            tensor_list (list[Optional[torch.Tensor]]): the list of tensors to pad
+
+        Returns:
+            list[Optional[torch.Tensor]]: the list of padded tensors
+        """
         if all(tensor is None for tensor in tensor_list):
             return tensor_list
         height, width = np.max([image.size()[-2:] for image in tensor_list if image is not None], axis=0)
@@ -70,8 +87,15 @@ class PadToMaxSize(_ApplyToList):
         return tensor_list
 
     def use_pil(self, tensor_list: list[Optional[torch.Tensor]]) -> bool:
-        # if all(tensor is None for tensor in tensor_list):
-        #     raise ValueError("All tensors are None")
+        """
+        Determine if the input is a list of PIL images, thus if the padding should be done with PIL
+
+        Args:
+            tensor_list (list[Optional[torch.Tensor]]): the list of tensors to check
+
+        Returns:
+            bool: True if the input is a list of PIL images, False otherwise
+        """
 
         for tensor in tensor_list:
             if tensor is not None:
@@ -92,6 +116,10 @@ class PadToMaxSize(_ApplyToList):
 
 
 class SmartCompose(torch.nn.Module):
+    """
+    Apply a list of transformations to an image or list of images
+    """
+
     def __init__(self, transforms):
         """
         Apply a list of transformations to an image or list of images
@@ -117,6 +145,7 @@ class SmartCompose(torch.nn.Module):
             raise ValueError(f"Expected input to be torch.Tensor or list, got {type(image)}")
 
     def __repr__(self) -> str:
+        # The format string is initialized with the class name and adds all the transformations as new lines
         format_string = self.__class__.__name__ + "("
         for t in self.transforms:
             format_string += "\n"
@@ -126,6 +155,10 @@ class SmartCompose(torch.nn.Module):
 
 
 class SquarePad(torch.nn.Module):
+    """
+    Pad an image to make it square
+    """
+
     def __init__(self):
         super(SquarePad, self).__init__()
 
