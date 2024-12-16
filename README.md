@@ -10,7 +10,6 @@ This is a tool to find what scans belong to the same document. It uses AI to com
     - [Docker](#docker)
       - [Manual Installation](#manual-installation)
   - [Training](#training)
-    - [Examples](#examples)
 
 
 ## Setup
@@ -88,16 +87,80 @@ docker build -t docker.separation $tmp_dir
 
 ## Training
 
-The model is trained using the `main.py` script. The model reads a xlsx file (`-x/--xlsx`) with the following columns: "Start of document" or "URL nieuw document op volgorde". It then reads the images responding to the URLs in the column matching inventory number. This is done using the `-t/--train` parameters which requires the path to the images or a directory containing the images. See the `-h/--help` for more information.
+The model is trained using the `main.py` script. Generally the script requires the paths to json files or the directory in which these json files are stored. 
 
-
-### Examples
-If validation is not specified the default is 0.2. The validation is the percentage of the data that is used for validation. The rest is used for training.
 ```sh
-python main.py -x <path_to_xlsx> -t <path_to_images>
+python main.py --train <path_to_json> --val <path_to_json>
 ```
 
-To specify the validation folders:
+If you do not specify the `--val` argument the script will use a 80/20 split of the training data for validation.
 ```sh
-python main.py -x <path_to_xlsx> -t <path_to_images> -v <path_to_validation>
+python main.py --train <path_to_json>
+```
+
+To change the augmentation parameters use the following arguments:
+```sh
+  -n/--number_of_images NUMBER_OF_IMAGES
+                        Number of images
+  --prob_shuffle_document PROB_SHUFFLE_DOCUMENT
+                        Probability to shuffle document
+  --prob_randomize_document_order PROB_RANDOMIZE_DOCUMENT_ORDER
+                        Probability to randomize document order
+  --prob_random_scan_insert PROB_RANDOM_SCAN_INSERT
+                        Probability to insert random scan
+  --sample_all_inventories
+                        Sample all inventories
+  --wrap_round          
+                        Wrap round
+  --split_ratio SPLIT_RATIO
+                        Split ratio
+```
+
+To change factors for the training use the following arguments:
+```sh
+  -e/--epochs EPOCHS
+                        Number of epochs
+  -b/--batch_size BATCH_SIZE
+                        Batch size
+  --num_workers NUM_WORKERS
+                        Number of workers
+  --learning_rate LEARNING_RATE
+                        Learning rate
+  --optimizer OPTIMIZER
+                        Optimizer
+  --label_smoothing LABEL_SMOOTHING
+                        Label smoothing
+  --unfreeze_imagenet UNFREEZE_IMAGENET
+                        Unfreeze ImageNet after epochs or percentage of epochs
+  --unfreeze_roberta UNFREEZE_ROBERTA
+                        Unfreeze RoBERTa after epochs or percentage of epochs
+  --dropout DROPOUT     
+                        Dropout
+```
+
+To continue training from a checkpoint use the following argument:
+```sh
+  --checkpoint CHECKPOINT
+                        Checkpoint
+```
+
+To change the name of the run and the output directory use the following arguments:
+```sh
+  --name NAME           
+                        Name of the run
+  --o/output OUTPUT
+                        Output folder
+```
+
+To use the XLSX format instead of the JSON format use the following arguments and change the `--train` and `--val` arguments to the paths of the images:
+```sh
+  --use_xlsx            
+                        Use XLSX file
+  --x/xlsx XLSX         
+                        XLSX file with labels
+```
+
+Example:
+```sh
+python main.py --train <path_to_images> --val <path_to_images> --use_xlsx --xlsx <path_to_xlsx> 
 ```
