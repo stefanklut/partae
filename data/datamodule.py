@@ -77,6 +77,7 @@ class DocumentSeparationModuleXLSX(pl.LightningDataModule):
         prob_randomize_document_order: float = 0.0,
         prob_random_scan_insert: float = 0.0,
         split_ratio: float = 0.8,
+        thumbnail_dir: Optional[Path] = None,
     ):
         super().__init__()
 
@@ -102,6 +103,8 @@ class DocumentSeparationModuleXLSX(pl.LightningDataModule):
         self.training_paths = link_with_paths(self.xlsx_file, training_paths)
         self.val_paths = link_with_paths(self.xlsx_file, val_paths)
 
+        self.thumbnail_dir = thumbnail_dir
+
     def prepare_data(self):
         # download, split, etc...
         pass
@@ -123,6 +126,7 @@ class DocumentSeparationModuleXLSX(pl.LightningDataModule):
                 prob_shuffle_document=self.prob_shuffle_document,
                 prob_randomize_document_order=self.prob_randomize_document_order,
                 prob_random_scan_insert=self.prob_random_scan_insert,
+                thumbnail_dir=self.thumbnail_dir,
             )
             self.val_dataset = DocumentSeparationDataset(
                 self.val_paths,
@@ -133,6 +137,7 @@ class DocumentSeparationModuleXLSX(pl.LightningDataModule):
                 prob_shuffle_document=0.0,
                 prob_randomize_document_order=0.0,
                 prob_random_scan_insert=0.0,
+                thumbnail_dir=self.thumbnail_dir,
             )
 
     def train_dataloader(self):
@@ -171,6 +176,8 @@ class DocumentSeparationModuleJSON(pl.LightningDataModule):
         prob_randomize_document_order: float = 0.0,
         prob_random_scan_insert: float = 0.0,
         split_ratio: float = 0.8,
+        image_dir: Optional[Path] = None,
+        thumbnail_dir: Optional[Path] = None,
     ):
         super().__init__()
 
@@ -195,6 +202,12 @@ class DocumentSeparationModuleJSON(pl.LightningDataModule):
         self.training_paths = self.jsons_to_paths(training_paths)
         self.val_paths = self.jsons_to_paths(val_paths)
 
+        if image_dir is None:
+            raise ValueError("Image directory is required")
+
+        self.image_dir = image_dir
+        self.thumbnail_dir = thumbnail_dir
+
     @staticmethod
     def scan_id_to_inventory_number(scan_id: str) -> str:
         """
@@ -215,8 +228,7 @@ class DocumentSeparationModuleJSON(pl.LightningDataModule):
         else:
             raise ValueError(f"Scan id {scan_id} does not match the expected format")
 
-    @staticmethod
-    def json_to_scan_label(path: Path) -> tuple[str, Path, bool]:
+    def json_to_scan_label(self, path: Path) -> tuple[str, Path, bool]:
         """
         Parse the JSON file to get the scan id and the path to the image file
 
@@ -231,16 +243,13 @@ class DocumentSeparationModuleJSON(pl.LightningDataModule):
             is_first_page = data["isFirstPage"]
             scan_id = data["scanId"]
 
-            # HACK This is a hack to get the correct file name
-            base = Path("/data/spinque-converted/")
-
             inventory_number = DocumentSeparationModuleJSON.scan_id_to_inventory_number(scan_id)
             inventory_number_dir = path.parent.name
             if inventory_number_dir != inventory_number:
                 logger.warning(
                     f"Inventory number in dir {inventory_number_dir} does not match with inventory number in file {inventory_number}. Path: {path}"
                 )
-            file_name = base.joinpath(inventory_number, f"{scan_id}.jp2")
+            file_name = self.image_dir.joinpath(inventory_number, f"{scan_id}.jp2")
 
         return inventory_number, file_name, is_first_page
 
@@ -306,6 +315,7 @@ class DocumentSeparationModuleJSON(pl.LightningDataModule):
                 prob_shuffle_document=self.prob_shuffle_document,
                 prob_randomize_document_order=self.prob_randomize_document_order,
                 prob_random_scan_insert=self.prob_random_scan_insert,
+                thumbnail_dir=self.thumbnail_dir,
             )
             self.val_dataset = DocumentSeparationDataset(
                 self.val_paths,
@@ -316,6 +326,7 @@ class DocumentSeparationModuleJSON(pl.LightningDataModule):
                 prob_shuffle_document=0.0,
                 prob_randomize_document_order=0.0,
                 prob_random_scan_insert=0.0,
+                thumbnail_dir=self.thumbnail_dir,
             )
         else:
             raise ValueError(f"Stage {stage} is not supported")

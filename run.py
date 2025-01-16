@@ -2,6 +2,7 @@ import argparse
 import itertools
 import json
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import torch
@@ -27,6 +28,12 @@ def get_arguments() -> argparse.Namespace:
     io_args.add_argument("-i", "--input", help="Input folder/files", nargs="+", action="extend", type=str, required=True)
     io_args.add_argument("-o", "--output", help="Output folder", type=str, required=True)
     io_args.add_argument("-c", "--checkpoint", help="Path to the checkpoint", type=str, default=None)
+    io_args.add_argument(
+        "--thumbnail_dir",
+        help="Path to the thumbnail directory",
+        type=str,
+        default="/data/thumbnails/data/spinque-converted",
+    )
 
     io_args.add_argument("--override", help="Override existing results", action="store_true")
 
@@ -104,6 +111,7 @@ class SavePredictor(Predictor):
         output_path: Path,
         checkpoint: str,
         override: bool = False,
+        thumbnail_dir: Optional[Path] = None,
     ) -> None:
         super().__init__(checkpoint)
         self.input_paths = None
@@ -122,6 +130,8 @@ class SavePredictor(Predictor):
                 Resize((512, 512)),
             ]
         )
+
+        self.thumbnail_dir = thumbnail_dir
 
     def results_exist(self, path: Path) -> bool:
         if self.output_dir is None:
@@ -189,6 +199,7 @@ class SavePredictor(Predictor):
             prob_random_scan_insert=0.0,
             prob_randomize_document_order=0.0,
             prob_shuffle_document=0.0,
+            thumbnail_dir=self.thumbnail_dir,
         )
 
         dataloader = torch.utils.data.DataLoader(
@@ -237,7 +248,7 @@ class SavePredictor(Predictor):
 
 
 def main(args):
-    predictor = SavePredictor(args.input, args.output, args.checkpoint, args.override)
+    predictor = SavePredictor(args.input, args.output, args.checkpoint, args.override, args.thumbnail_dir)
     predictor.process()
 
 

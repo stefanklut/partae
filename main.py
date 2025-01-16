@@ -47,6 +47,11 @@ def get_arguments() -> argparse.Namespace:
     io_args.add_argument("-o", "--output", help="Output folder", type=str, default="lightning_logs")
     io_args.add_argument("--name", help="Name of the run", type=str, default="document_separator")
 
+    io_args.add_argument("--image_dir", help="Path to the image directory", type=str, default="/data/spinque-converted")
+    io_args.add_argument(
+        "--thumbnail_dir", help="Path to the thumbnail directory", type=str, default="/data/thumbnails/data/spinque-converted"
+    )
+
     training_args = parser.add_argument_group("Training")
     training_args.add_argument("-e", "--epochs", help="Number of epochs", type=int, default=40)
     training_args.add_argument("-b", "--batch_size", help="Batch size", type=int, default=4)
@@ -130,6 +135,7 @@ def main(args: argparse.Namespace):
             prob_random_scan_insert=args.prob_random_scan_insert,
             prob_randomize_document_order=args.prob_randomize_document_order,
             split_ratio=args.split_ratio,
+            thumbnail_dir=args.thumbnail_dir,
         )
     else:
         training_paths = get_file_paths(args.train, formats=[".json"])
@@ -151,6 +157,8 @@ def main(args: argparse.Namespace):
             prob_random_scan_insert=args.prob_random_scan_insert,
             prob_randomize_document_order=args.prob_randomize_document_order,
             split_ratio=args.split_ratio,
+            image_dir=args.image_dir,
+            thumbnail_dir=args.thumbnail_dir,
         )
     model = DocumentSeparator(
         dropout=args.dropout,

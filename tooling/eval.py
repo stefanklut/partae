@@ -29,6 +29,12 @@ def get_arguments() -> argparse.Namespace:
     )
     io_args.add_argument("-x", "--xlsx", help="XLSX file with labels", type=str, default=None)
     io_args.add_argument("-c", "--checkpoint", help="Path to the checkpoint", type=str, default=None)
+    io_args.add_argument(
+        "--thumbnail_dir",
+        help="Path to the thumbnail directory",
+        type=str,
+        default=Path("/data/thumbnails/data/spinque-converted"),
+    )
 
     args = parser.parse_args()
     return args
@@ -59,6 +65,7 @@ def main(args: argparse.Namespace):
         image_paths=val_paths,
         transform=transform,
         number_of_images=3,
+        thumbnail_dir=args.thumbnail_dir,
     )
 
     val_dataloader = torch.utils.data.DataLoader(

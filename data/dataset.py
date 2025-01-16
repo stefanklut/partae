@@ -38,6 +38,7 @@ class DocumentSeparationDataset(Dataset):
         prob_shuffle_document: float = 0.0,
         prob_randomize_document_order: float = 0.0,
         prob_random_scan_insert: float = 0.0,
+        thumbnail_dir: Optional[Path | str] = None,
     ):
         self.image_paths = image_paths
         assert mode in ["train", "val", "test"], "Mode must be one of 'train', 'val', 'test'"
@@ -83,6 +84,8 @@ class DocumentSeparationDataset(Dataset):
         self.wrap_round = wrap_round
         self.transform = transform
 
+        self.thumbnail_dir = Path(thumbnail_dir) if thumbnail_dir is not None else None
+
     def __len__(self):
         return self.len
 
@@ -102,7 +105,10 @@ class DocumentSeparationDataset(Dataset):
         image_path: Path = self.image_paths[inventory][document][scan]
 
         # Check if thumbnail exists
-        thumbnail_path = Path("/data/thumbnails/").joinpath(str(image_path.relative_to(Path("/"))) + ".thumbnail.jpg")
+        if self.thumbnail_dir is not None:
+            thumbnail_path = self.thumbnail_dir.joinpath(str(image_path.relative_to(image_path.parents[1])) + ".thumbnail.jpg")
+        else:
+            thumbnail_path = Path(str(image_path) + ".thumbnail.jpg")
         try:
             image = Image.open(thumbnail_path)
             image.load()
