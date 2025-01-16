@@ -13,9 +13,9 @@ RUN apt-get update -y && \
     apt-get autoremove -y
 
 WORKDIR /src/
-COPY separation.multistage/ separation/
+COPY partae.multistage/ partae/
 
-WORKDIR /src/separation
+WORKDIR /src/partae
 # Removing the nsight-compute folder as it is not needed for runtime
 RUN mamba env create -p /env -f environment.yml && \
     mamba clean -y --all --force-pkgs-dirs
@@ -27,7 +27,7 @@ ENV CONDA_DEFAULT_ENV=/env
 ENV ENV_NAME=/env
 
 
-# ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "separation", "/bin/bash", "-c"]
+# ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "partae", "/bin/bash", "-c"]
 
 
 FROM condaforge/mambaforge as runner
@@ -41,10 +41,10 @@ RUN apt-get update -y && \
 
 
 COPY --from=builder /env /env
-COPY --from=builder /src/separation /src/separation
+COPY --from=builder /src/partae /src/partae
 
-# SHELL ["conda", "run", "-n", "separation", "/bin/bash", "-c"]
-# RUN echo "conda activate separation" >> ~/.bashrc
+# SHELL ["conda", "run", "-n", "partae", "/bin/bash", "-c"]
+# RUN echo "conda activate partae" >> ~/.bashrc
 ENV PATH=/env/bin/:$PATH
 ENV CONDA_DEFAULT_ENV=/env
 ENV ENV_NAME=/env
@@ -52,9 +52,9 @@ ENV ENV_NAME=/env
 # Fix cuda permissions with the docker
 # RUN chmod go+rx /env/pkgs/cuda-toolkit/
 # Fix git permissions with the docker
-# RUN git config --system --add safe.directory /src/separation
+# RUN git config --system --add safe.directory /src/partae
 
-WORKDIR /src/separation
+WORKDIR /src/partae
 COPY _entrypoint.sh /_entrypoint.sh
 
 ENTRYPOINT ["/_entrypoint.sh"]

@@ -13,27 +13,27 @@ RUN apt-get update -y && \
     apt-get autoremove -y
 
 WORKDIR /src/
-COPY separation/ separation/
+COPY partae/ partae/
 COPY _entrypoint.sh /_entrypoint.sh
 
-WORKDIR /src/separation
+WORKDIR /src/partae
 # Removing the nsight-compute folder as it is not needed for runtime
 RUN mamba env create -f environment.yml && \
     mamba clean -y --all --force-pkgs-dirs
-# rm -r /opt/conda/envs/separation/nsiglht* 
+# rm -r /opt/conda/envs/partae/nsiglht* 
 
-# SHELL ["conda", "run", "-n", "separation", "/bin/bash", "-c"]
-ENV PATH=/opt/conda/envs/separation/bin:$PATH
-ENV CONDA_DEFAULT_ENV=separation
-ENV ENV_NAME=separation
+# SHELL ["conda", "run", "-n", "partae", "/bin/bash", "-c"]
+ENV PATH=/opt/conda/envs/partae/bin:$PATH
+ENV CONDA_DEFAULT_ENV=partae
+ENV ENV_NAME=partae
 
 # Fix cuda permissions with the docker
-# RUN chmod go+rx /opt/conda/envs/separation/pkgs/cuda-toolkit/
+# RUN chmod go+rx /opt/conda/envs/partae/pkgs/cuda-toolkit/
 # Fix git permissions with the docker
-# RUN git config --system --add safe.directory /src/separation
+# RUN git config --system --add safe.directory /src/partae
 
 ENTRYPOINT ["/_entrypoint.sh"]
 CMD ["/bin/bash"]
-# ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "separation", "/bin/bash", "-c"]
+# ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "partae", "/bin/bash", "-c"]
 
 USER 1000
