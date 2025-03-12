@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -89,19 +90,6 @@ images_processed_counter = Counter("images_processed", "Total number of images p
 exception_predict_counter = Counter("exception_predict", "Exception thrown in predict() function")
 
 
-def get_middle_scan(y: np.ndarray) -> np.ndarray:
-    """
-    Get the middle scan of a 2D array
-
-    Args:
-        y (np.ndarray): Array to get the middle scan of
-
-    Returns:
-        np.ndarray: Middle scan of the array
-    """
-    return y[:, y.shape[1] // 2]
-
-
 def get_middle_path(paths: list[list[Path]]) -> Path:
     """
     Get the middle path of a list of paths
@@ -140,20 +128,20 @@ def predict_class(
 
         image_path = get_middle_path(data["image_paths"])
 
-        output_path = output_base_path.joinpath(identifier, image_path.name).with_suffix(".txt")
+        output_path = output_base_path.joinpath(identifier, image_path.name).with_suffix(".json")
         if predict_wrapper.predictor is None:
             raise TypeError("The current Predictor is not initialized")
 
         if not output_path.parent.is_dir():
             output_path.parent.mkdir()
 
-        outputs = predict_wrapper.predictor(data)
-
-        outputs = outputs.cpu().numpy()
-        output_middle = get_middle_scan(outputs)
+        output, _, _ = predict_wrapper.predictor(data)
+        for key, value in output.items():
+            if isinstance(value, torch.Tensor):
+                output[key] = value.cpu().item()
 
         with open(output_path, "w") as file:
-            file.write(str(output_middle.item()))
+            json.dump(output, file)
 
         images_processed_counter.inc()
         return input_args
