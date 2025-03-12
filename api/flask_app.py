@@ -90,7 +90,7 @@ images_processed_counter = Counter("images_processed", "Total number of images p
 exception_predict_counter = Counter("exception_predict", "Exception thrown in predict() function")
 
 
-def get_middle_path(paths: list[list[Path]]) -> Path:
+def get_middle_path(paths: list[list[str]]) -> Path:
     """
     Get the middle path of a list of paths
 
@@ -100,7 +100,7 @@ def get_middle_path(paths: list[list[Path]]) -> Path:
     Returns:
         Path: Middle path of the list
     """
-    return paths[0][len(paths[0]) // 2]
+    return Path(paths[0][len(paths[0]) // 2])
 
 
 def predict_class(
@@ -135,7 +135,7 @@ def predict_class(
         if not output_path.parent.is_dir():
             output_path.parent.mkdir()
 
-        output, _, _ = predict_wrapper.predictor(data)
+        output = predict_wrapper.predictor(data)
         for key, value in output.items():
             if isinstance(value, torch.Tensor):
                 output[key] = value.cpu().item()
@@ -165,7 +165,8 @@ class ResponseInfo(TypedDict, total=False):
 
     status_code: int
     identifier: str
-    filename: str
+    images: list[str]
+    texts: list[str]
     whitelist: list[str]
     added_queue_position: int
     remaining_queue_size: int
@@ -275,8 +276,7 @@ def predict() -> tuple[Response, int]:
     for post_file_i in post_file:
         if post_file_i.filename:
             image_name = Path(post_file_i.filename)
-            image_names.append(image_name)
-            response_info["filename"] = str(image_name)
+            image_names.append(str(image_name))
         else:
             abort_with_info(400, "Missing filename", response_info)
 
@@ -293,12 +293,18 @@ def predict() -> tuple[Response, int]:
 
         _images.append(image_data)
 
+    response_info["images"] = image_names
+
+    if len(_images) != 3:
+        abort_with_info(400, "Number of images should be 3", response_info)
+
     # Load the multiple XML files
     texts = []
+    text_names = []
     for post_text_i in post_text:
         if post_text_i.filename:
             text_name = Path(post_text_i.filename)
-            response_info["filename"] = str(text_name)
+            text_names.append(str(text_name))
         else:
             abort_with_info(400, "Missing filename", response_info)
 
@@ -308,9 +314,14 @@ def predict() -> tuple[Response, int]:
             continue
         xml = text_bytes.decode("utf-8")
         page_data = PageData.from_string(xml, text_name)
-        text = page_data.get_combined_transcription()
+        text = page_data.get_transcription_dict()
 
         texts.append(text)
+
+    response_info["texts"] = text_names
+
+    if len(texts) != 3:
+        abort_with_info(400, "Number of texts should be 3", response_info)
 
     # Check if the image was send correctly. If the image is empty, the text should also be empty
     for image, text in zip(_images, texts):
