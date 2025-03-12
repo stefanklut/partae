@@ -369,7 +369,7 @@ class DocumentSeparationDataset(Dataset):
 
     # https://stackoverflow.com/a/64015315
     @staticmethod
-    def random_choice_except(high: int, excluding: int, size=None, replace=True) -> np.ndarray | int:
+    def random_choice_except(high: int, excluding: int, size=None, replace=True) -> int:
         """
         Generate random values in the range [0, high-1) without the value excluding
 
@@ -513,7 +513,7 @@ class DocumentSeparationDataset(Dataset):
             next_idcs.extend(next_scans)
         return next_idcs[: self.steps_forward]
 
-    def get_previous_idcs(self, inventory: int, document: int, scan: int) -> list[tuple[int, int, int] | None]:
+    def get_previous_idcs(self, inventory: int, document: int, scan: int) -> list[tuple[int, int, int] | None] | list[None]:
         """
         Get the previous indices in the dataset.
 
