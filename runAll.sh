@@ -7,7 +7,7 @@ OUTPUT_DIR=./output
 checkpoint_dir=$(mktemp -d -p .)
 
 # Run training
-CUDA_VISIBLE_DEVICES=0 python main.py \
+CUDA_VISIBLE_DEVICES=0 python train.py \
     --output $checkpoint_dir \
     --train $TRAIN_DIRS \
     --xlsx $XLSX_FILE \
@@ -31,7 +31,7 @@ best_checkpoint=$(find $checkpoint_dir -name "*val_acc=*.ckpt" | \
 best_checkpoint=$checkpoint_dir/version_0/checkpoints/$best_checkpoint
 
 # Run inference
-CUDA_VISIBLE_DEVICES=0 python run.py \
+CUDA_VISIBLE_DEVICES=0 python inference.py \
     --output $OUTPUT_DIR \
     --input $INPUT_DIRS \
     --checkpoint $best_checkpoint

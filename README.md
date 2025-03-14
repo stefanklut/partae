@@ -87,15 +87,15 @@ docker build -t docker.separation $tmp_dir
 
 ## Training
 
-The model is trained using the `main.py` script. Generally the script requires the paths to json files or the directory in which these json files are stored. 
+The model is trained using the `train.py` script. Generally the script requires the paths to json files or the directory in which these json files are stored. 
 
 ```sh
-python main.py --train <path_to_json> --val <path_to_json>
+python train.py --train <path_to_json> --val <path_to_json>
 ```
 
 If you do not specify the `--val` argument the script will use a 80/20 split of the training data for validation.
 ```sh
-python main.py --train <path_to_json>
+python train.py --train <path_to_json>
 ```
 
 To change the augmentation parameters use the following arguments:
@@ -162,5 +162,5 @@ To use the XLSX format instead of the JSON format use the following arguments an
 
 Example:
 ```sh
-python main.py --train <path_to_images> --val <path_to_images> --use_xlsx --xlsx <path_to_xlsx> 
+python train.py --train <path_to_images> --val <path_to_images> --use_xlsx --xlsx <path_to_xlsx> 
 ```

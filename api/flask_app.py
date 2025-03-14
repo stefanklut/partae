@@ -18,8 +18,8 @@ from torchvision.transforms import Resize, ToTensor
 
 sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))  # noqa: E402
 from data.augmentations import PadToMaxSize, SmartCompose
+from inference import Predictor
 from page_xml.xmlPAGE import PageData
-from run import Predictor
 from utils.image_utils import load_image_array_from_bytes
 from utils.logging_utils import get_logger_name
 
