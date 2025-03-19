@@ -10,6 +10,9 @@ This is a tool to find what scans belong to the same document. It uses AI to com
     - [Docker](#docker)
       - [Manual Installation](#manual-installation)
   - [Training](#training)
+  - [Contact](#contact)
+    - [Issues](#issues)
+    - [Contributions](#contributions)
 
 
 ## Setup
@@ -82,6 +85,11 @@ Then build the docker image using the following command:
 docker build -t docker.partae $tmp_dir
 ```
 </details>
+
+To use the docker image as an API service, we recommend using docker compose. The docker compose file is provided in the [`docker-compose.yml`][docker_compose_link] file. The docker compose file can be run using the following command:
+```sh
+docker-compose up
+```
 
 <!-- TODO Update the training and inference section -->
 
@@ -164,3 +172,20 @@ Example:
 ```sh
 python train.py --train <path_to_images> --val <path_to_images> --use_xlsx --xlsx <path_to_xlsx> 
 ```
+## Contact
+This project was made while working at the [KNAW Humanities Cluster Digital Infrastructure][huc_di_link]
+### Issues
+Please report any bugs or errors that you find to the [issues][issues_link] page, so that they can be looked into. Try to see if an issue with the same problem/bug is not still open. Feature requests should also be done through the [issues][issues_link] page.
+
+### Contributions
+If you discover a bug or missing feature that you would like to help with please feel free to send a [pull request][pull_request_link]. 
+
+
+<!-- Images and Links Shorthand-->
+[conda_install_link]: https://conda.io/projects/conda/en/latest/user-guide/install/index.html#regular-installation
+[mamba_install_link]: https://mamba.readthedocs.io/en/latest/installation.html
+[docker_install_link]: https://docs.docker.com/engine/install/
+[huc_di_link]: https://di.huc.knaw.nl/
+[environment_link]: environment.yml
+[docker_compose_link]: docker/docker-compose.yml
+[issues_link]: https://github.com/stefanklut/partae/issues
