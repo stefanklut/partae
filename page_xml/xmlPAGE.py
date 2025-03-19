@@ -303,7 +303,7 @@ class PageData:
         processing_step.attrib = {
             "type": "processingStep",
             "name": "layout-analysis",
-            "value": "laypa",
+            "value": "partae",
         }
         labels = ET.SubElement(processing_step, "Labels")
         git_hash_element = ET.SubElement(labels, "Label")

@@ -68,7 +68,7 @@ Or the multistage build with some profiler tools taken out (might be smaller):
 <details>
 <summary> Click for manual docker install instructions (not recommended) </summary>
 
-First copy the Laypa directory to the temporary docker directory:
+First copy the Partae directory to the temporary docker directory:
 ```sh
 tmp_dir=$(mktemp -d)
 cp -r -T <PATH_TO_DIR> $tmp_dir/partae
