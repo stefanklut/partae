@@ -11,7 +11,7 @@ from typing import Any, Mapping
 
 from termcolor import colored
 
-LOGGER_BASE_NAME: str = "document-separation"
+LOGGER_BASE_NAME: str = "partae"
 DEFAULT_LOG_BUFFER_SIZE: int = 1024 * 1024  # 1MB
 LOG_BUFFER_SIZE_KEY: str = "LOG_BUFFER_SIZE"
 
@@ -89,7 +89,7 @@ def _cached_log_stream(filename: str):
 
 
 @functools.lru_cache()  # so that calling setup_logger multiple times won't add many handlers
-def setup_logger(output=None, distributed_rank=0, *, color=True, name="document-separation", abbrev_name=None):
+def setup_logger(output=None, distributed_rank=0, *, color=True, name="partae", abbrev_name=None):
     """
     Initialize the detectron2 logger and set its verbosity level to "DEBUG".
 

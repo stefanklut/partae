@@ -1,9 +1,9 @@
-# document-separation
+# Partae
 
 This is a tool to find what scans belong to the same document. It uses AI to compare the images and the text of consecutive scans and determine if they belong to the same document. It classifies a scan as either the start of a document or a continuation of the previous document. 
 
 ## Table of Contents
-- [document-separation](#document-separation)
+- [Partae](#partae)
   - [Table of Contents](#table-of-contents)
   - [Setup](#setup)
     - [Conda](#conda)
@@ -71,7 +71,7 @@ Or the multistage build with some profiler tools taken out (might be smaller):
 First copy the Laypa directory to the temporary docker directory:
 ```sh
 tmp_dir=$(mktemp -d)
-cp -r -T <PATH_TO_DIR> $tmp_dir/separation
+cp -r -T <PATH_TO_DIR> $tmp_dir/partae
 cp Dockerfile $tmp_dir/Dockerfile
 cp _entrypoint.sh $tmp_dir/_entrypoint.sh
 cp .dockerignore $tmp_dir/.dockerignore
@@ -79,7 +79,7 @@ cp .dockerignore $tmp_dir/.dockerignore
 
 Then build the docker image using the following command:
 ```sh
-docker build -t docker.separation $tmp_dir
+docker build -t docker.partae $tmp_dir
 ```
 </details>
 

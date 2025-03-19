@@ -27,11 +27,11 @@ logger = logging.getLogger(get_logger_name())
 
 # Reading environment files
 try:
-    max_queue_size_string: str = os.environ["SEPARATION_MAX_QUEUE_SIZE"]
-    model_base_path_string: str = os.environ["SEPARATION_MODEL_BASE_PATH"]
-    output_base_path_string: str = os.environ["SEPARATION_OUTPUT_BASE_PATH"]
+    max_queue_size_string: str = os.environ["PARTAE_MAX_QUEUE_SIZE"]
+    model_base_path_string: str = os.environ["PARTAE_MODEL_BASE_PATH"]
+    output_base_path_string: str = os.environ["PARTAE_OUTPUT_BASE_PATH"]
 except KeyError as error:
-    raise KeyError(f"Missing Separation Environment variable: {error.args[0]}")
+    raise KeyError(f"Missing PARTAE Environment variable: {error.args[0]}")
 
 # Convert
 max_queue_size = int(max_queue_size_string)
@@ -40,9 +40,9 @@ output_base_path = Path(output_base_path_string)
 
 # Checks if ENV variable exist
 if not model_base_path.is_dir():
-    raise FileNotFoundError(f"SEPARATION_MODEL_BASE_PATH: {model_base_path} is not found in the current filesystem")
+    raise FileNotFoundError(f"PARTAE_MODEL_BASE_PATH: {model_base_path} is not found in the current filesystem")
 if not output_base_path.is_dir():
-    raise FileNotFoundError(f"SEPARATION_OUTPUT_BASE_PATH: {output_base_path} is not found in the current filesystem")
+    raise FileNotFoundError(f"PARTAE_OUTPUT_BASE_PATH: {output_base_path} is not found in the current filesystem")
 
 app = Flask(__name__)
 

@@ -31,7 +31,7 @@ class PageData:
         """
         self.logger = logging.getLogger(get_logger_name())
 
-        self.creator = "Separation" if creator == None else creator
+        self.creator = "partae" if creator == None else creator
 
         # REVIEW should this be replaced with the newer pageXML standard?
         self.XMLNS = {
