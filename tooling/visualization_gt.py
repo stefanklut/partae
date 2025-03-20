@@ -23,13 +23,15 @@ logger = logging.getLogger(get_logger_name())
 
 
 def get_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Visualization of prediction/GT of model")
+    parser = argparse.ArgumentParser(description="Visualization of GT of model")
 
     io_args = parser.add_argument_group("IO")
     # io_args.add_argument("-t", "--train", help="Train input folder/file",
     #                         nargs="+", action="extend", type=str, default=None)
     io_args.add_argument("-i", "--input", help="Input folder/file", nargs="+", action="extend", type=str, default=None)
     io_args.add_argument("-o", "--output", help="Output folder", type=str)
+
+    io_args.add_argument("--thumbnail_dir", help="Path to the thumbnail directory", type=str, default="/data/thumbnails")
 
     args = parser.parse_args()
 
@@ -74,7 +76,7 @@ def on_close(event):
 
 
 @functools.lru_cache(maxsize=IMAGE_PRELOAD * 2)
-def get_image(image_path: str | Path) -> Optional[np.ndarray]:
+def get_image(image_path: str | Path, thumbnail_dir: Path) -> Optional[np.ndarray]:
     """
     Load an image and return the success of loading the image
 
@@ -87,7 +89,7 @@ def get_image(image_path: str | Path) -> Optional[np.ndarray]:
     image_path = Path(image_path)
 
     # Check if thumbnail exists
-    thumbnail_path = Path("/data/thumbnails/").joinpath(str(image_path.relative_to(Path("/"))) + ".thumbnail.jpg")
+    thumbnail_path = thumbnail_dir.joinpath(str(image_path.relative_to(Path("/"))) + ".thumbnail.jpg")
     try:
         image = Image.open(thumbnail_path)
         image.load()
@@ -172,6 +174,8 @@ def main(args) -> None:
     Args:
         args (argparse.Namespace): arguments for where to find the images
     """
+    thumbnail_dir = Path(args.thumbnail_dir)
+
     json_paths = []
     for json_path in args.input:
         json_path = Path(json_path)
@@ -204,7 +208,7 @@ def main(args) -> None:
 
     for i in range(min(IMAGE_PRELOAD, len(loader))):
         preload_image_path, _ = json_to_scan_label(loader[i])
-        pool.submit(get_image, preload_image_path)
+        pool.submit(get_image, preload_image_path, thumbnail_dir)
 
     i = 0
     while 0 <= i < len(loader):
@@ -218,7 +222,7 @@ def main(args) -> None:
         axes[0].clear()
         axes[0].axis("off")
 
-        image = get_image(image_path)
+        image = get_image(image_path, thumbnail_dir)
 
         border = 10
         color = [255, 0, 0] if is_first_page == 1 else [255, 255, 255]
@@ -230,7 +234,7 @@ def main(args) -> None:
         axes[0].imshow(image)
         if i + IMAGE_PRELOAD < len(loader):
             preload_image_path, _ = json_to_scan_label(loader[i + IMAGE_PRELOAD])
-            pool.submit(get_image, preload_image_path)
+            pool.submit(get_image, preload_image_path, thumbnail_dir)
 
         suptitle = f"{i+1}/{len(loader)}: {Path(image_path).name} result: {is_first_page}"
         fig.suptitle(suptitle)

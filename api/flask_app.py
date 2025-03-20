@@ -128,7 +128,7 @@ def predict_class(
 
         image_path = get_middle_path(data["image_paths"])
 
-        output_path = output_base_path.joinpath(identifier, image_path.name).with_suffix(".json")
+        output_path = output_base_path.joinpath(identifier, image_path.stem + ".json")
         if predict_wrapper.predictor is None:
             raise TypeError("The current Predictor is not initialized")
 

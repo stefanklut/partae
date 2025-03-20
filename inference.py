@@ -136,10 +136,12 @@ class SavePredictor(Predictor):
     def results_exist(self, path: Path) -> bool:
         if self.output_dir is None:
             raise ValueError("Output path not set")
-        if self.output_dir.joinpath(path.name, "results.json").exists():
-            print(f"Results exist {self.output_dir.joinpath(path.name, 'results.json')}. Skipping inventory {path.name}")
-            return True
-        return False
+        for image_path in get_file_paths(path, formats=supported_image_formats):
+            json_path = self.output_dir.joinpath(image_path.parent.name, image_path.stem + ".json")
+            if not json_path.exists():
+                return False
+        print(f"Results exist {self.output_dir.joinpath(path.name)}. Skipping inventory {path.name}")
+        return True
 
     def set_input_paths(self, input_paths: list[Path]) -> None:
         input_paths = natsorted([Path(input_path) for input_path in input_paths])
@@ -209,42 +211,22 @@ class SavePredictor(Predictor):
             collate_fn=collate_fn,
         )
 
-        def save_json(json_data, output_path):
-            json_data = {k: v for d in json_data for k, v in d.items()}
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            print(f"Saving results to {output_path}")
-            with open(output_path, "w") as f:
-                json.dump(json_data, f)
-
-        json_data = []
         inventory = None
-        previous_inventory = None
         for data in tqdm(dataloader, desc="Processing"):
             result = self(data)
 
             middle_path = self.get_middle_path(data["image_paths"])
             inventory = middle_path.parent
 
-            output_path = self.output_dir.joinpath(inventory.name, "results.json")
-            if inventory != previous_inventory:
-                if previous_inventory is not None:
-                    inventory_name = previous_inventory.name
-                    output_path = self.output_dir.joinpath(inventory_name, "results.json")
-                    save_json(json_data, output_path)
-                previous_inventory = inventory
-                json_data = []
-            # Save the result
+            output_path = self.output_dir.joinpath(inventory.name, middle_path.stem + ".json")
 
             result = {
-                str(middle_path): {
-                    "result": result["label"].cpu().item(),
-                    "confidence": result["confidence"].cpu().item(),
-                }
+                "result": result["label"].cpu().item(),
+                "confidence": result["confidence"].cpu().item(),
             }
-            json_data.append(result)
-        if inventory is not None:
-            output_path = self.output_dir.joinpath(inventory.name, "results.json")
-            save_json(json_data, output_path)
+
+            with output_path.open("w") as f:
+                json.dump(result, f)
 
 
 def main(args):

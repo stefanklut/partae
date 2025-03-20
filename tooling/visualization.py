@@ -16,19 +16,23 @@ from PIL import Image
 from tqdm import tqdm
 
 sys.path.append(str(Path(__file__).resolve().parent.joinpath("..")))
+from utils.input_utils import get_file_paths, supported_image_formats
 from utils.logging_utils import get_logger_name
 
 logger = logging.getLogger(get_logger_name())
 
 
 def get_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Visualization of prediction/GT of model")
+    parser = argparse.ArgumentParser(description="Visualization of prediction of model")
 
     io_args = parser.add_argument_group("IO")
     # io_args.add_argument("-t", "--train", help="Train input folder/file",
     #                         nargs="+", action="extend", type=str, default=None)
     io_args.add_argument("-i", "--input", help="Input folder/file", nargs="+", action="extend", type=str, default=None)
     io_args.add_argument("-o", "--output", help="Output folder", type=str)
+
+    io_args.add_argument("--image_dir", help="Path to the image directory", type=str, default="/data/spinque-converted")
+    io_args.add_argument("--thumbnail_dir", help="Path to the thumbnail directory", type=str, default="/data/thumbnails")
 
     args = parser.parse_args()
 
@@ -64,7 +68,7 @@ def on_close(event):
 
 
 @functools.lru_cache(maxsize=IMAGE_PRELOAD * 2)
-def get_image(image_path: str | Path) -> Optional[np.ndarray]:
+def get_image(image_path: str | Path, thumbnail_dir) -> Optional[np.ndarray]:
     """
     Load an image and return the success of loading the image
 
@@ -77,7 +81,10 @@ def get_image(image_path: str | Path) -> Optional[np.ndarray]:
     image_path = Path(image_path)
 
     # Check if thumbnail exists
-    thumbnail_path = Path("/data/thumbnails/").joinpath(str(image_path.relative_to(Path("/"))) + ".thumbnail.jpg")
+    if thumbnail_dir is not None:
+        thumbnail_path = thumbnail_dir.joinpath(str(image_path.relative_to(image_path.parents[1])) + ".thumbnail.jpg")
+    else:
+        thumbnail_path = Path(str(image_path) + ".thumbnail.jpg")
     try:
         image = Image.open(thumbnail_path)
         image.load()
@@ -94,6 +101,19 @@ def get_image(image_path: str | Path) -> Optional[np.ndarray]:
     return np.asarray(image)
 
 
+def json_path_to_image_path(json_path: Path, image_base_path: Path) -> Optional[Path]:
+    """
+    Convert a json path to an image path
+    """
+    inventory_number = json_path.parent.name
+    inventory_dir = image_base_path.joinpath(inventory_number)
+    for suffix in supported_image_formats:
+        image_path = inventory_dir.joinpath(json_path.stem + suffix)
+        if image_path.exists():
+            return image_path
+    raise FileNotFoundError(f"Could not find image for {json_path}")
+
+
 def main(args) -> None:
     """
     Currently running the validation set and showing the ground truth and the prediction side by side
@@ -102,14 +122,13 @@ def main(args) -> None:
         args (argparse.Namespace): arguments for where to find the images
     """
     combined_jsons = {}
-    for json_path in args.input:
-        json_path = Path(json_path)
-        if not json_path.is_file():
-            raise ValueError(f"Could not find file {json_path}")
-        if not json_path.suffix == ".json":
-            raise ValueError(f"File {json_path} is not a json file")
+    image_dir = Path(args.image_dir)
+    thumbnail_dir = Path(args.thumbnail_dir)
+    for json_path in get_file_paths(args.input, formats=[".json"]):
+        image_path = json_path_to_image_path(json_path, image_dir)
+
         with json_path.open(mode="r") as f:
-            combined_jsons.update(json.load(f))
+            combined_jsons.update({image_path: json.load(f)})
 
     loader = os_sorted(list(combined_jsons.keys()))
 
@@ -132,7 +151,7 @@ def main(args) -> None:
 
     for i in range(min(IMAGE_PRELOAD, len(loader))):
         image_path = loader[i]
-        pool.submit(get_image, image_path)
+        pool.submit(get_image, image_path, thumbnail_dir)
 
     i = 0
     while 0 <= i < len(loader):
@@ -145,7 +164,7 @@ def main(args) -> None:
         axes[0].clear()
         axes[0].axis("off")
 
-        image = get_image(image_path)
+        image = get_image(image_path, thumbnail_dir)
 
         border = 10
         color = [255, 0, 0] if data["result"] == 1 else [255, 255, 255]
@@ -156,7 +175,7 @@ def main(args) -> None:
 
         axes[0].imshow(image)
         if i + IMAGE_PRELOAD < len(loader):
-            pool.submit(get_image, loader[i + IMAGE_PRELOAD])
+            pool.submit(get_image, loader[i + IMAGE_PRELOAD], thumbnail_dir)
 
         suptitle = f"{i+1}/{len(loader)}: {Path(image_path).name} result: {data['result']} confidence: {data['confidence']:.2f}"
 
