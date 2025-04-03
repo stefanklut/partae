@@ -164,3 +164,6 @@ lightning_logs/
 
 # Excel files
 *.xlsx
+
+# Cache files for models
+models/cache/

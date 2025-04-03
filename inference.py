@@ -49,7 +49,7 @@ class Predictor:
         if not checkpoint:
             raise ValueError("No checkpoint provided")
 
-        self.model = DocumentSeparator.load_from_checkpoint(checkpoint)
+        self.model = DocumentSeparator.load_from_checkpoint(checkpoint, offline=True)
         self.model.eval()
 
     def __call__(self, data: dict) -> dict:
@@ -219,6 +219,7 @@ class SavePredictor(Predictor):
             inventory = middle_path.parent
 
             output_path = self.output_dir.joinpath(inventory.name, middle_path.stem + ".json")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
             result = {
                 "result": result["label"].cpu().item(),

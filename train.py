@@ -229,6 +229,7 @@ def main(args: argparse.Namespace):
         save_top_k=3,
         save_last="link",
         mode="min",
+        save_weights_only=True,
     )
 
     checkpointer_val_center_acc = ModelCheckpoint(
@@ -237,6 +238,7 @@ def main(args: argparse.Namespace):
         filename="document_separator-{epoch:02d}-{val_acc:.4f}",
         save_top_k=3,
         mode="max",
+        save_weights_only=True,
     )
 
     checkpointer_epoch = ModelCheckpoint(

@@ -47,13 +47,17 @@ class LinearBlock(nn.Module):
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, merge_to_batch=True, resize_size=(512, 512)):
+    def __init__(self, merge_to_batch=True, resize_size=(512, 512), offline=False):
         super(ImageEncoder, self).__init__()
 
         self.merge_to_batch = merge_to_batch
         self.resize_size = resize_size
+        if not offline:
+            weights = ResNet34_Weights.DEFAULT
+        else:
+            weights = None
 
-        imagenet = torchvision.models.resnet34(weights=ResNet34_Weights.DEFAULT)
+        imagenet = torchvision.models.resnet34(weights=weights)
         self.imagenet = nn.Sequential(*list(imagenet.children())[:-2])
         self.conv2d = nn.Sequential(
             nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),
@@ -117,13 +121,20 @@ class ImageEncoder(nn.Module):
 
 
 class TextEncoder(nn.Module):
-    def __init__(self, merge_to_batch=True):
+    def __init__(self, merge_to_batch=True, offline=False):
         super(TextEncoder, self).__init__()
 
         self.merge_to_batch = merge_to_batch
 
-        self.tokenizer = RobertaTokenizer.from_pretrained("pdelobelle/robbert-v2-dutch-base")
-        self.roberta = RobertaModel.from_pretrained("pdelobelle/robbert-v2-dutch-base", add_pooling_layer=False)
+        if not offline:
+            local_files_only = False
+            model_location = "pdelobelle/robbert-v2-dutch-base"
+        else:
+            local_files_only = True
+            model_location = "models/cache/robbert-v2-dutch-base"
+
+        self.tokenizer = RobertaTokenizer.from_pretrained(model_location, local_files_only=local_files_only)
+        self.roberta = RobertaModel.from_pretrained(model_location, add_pooling_layer=False, local_files_only=local_files_only)
 
         self.fc = nn.Sequential(
             LazyLinearBlock(512),
@@ -183,16 +194,15 @@ class TextEncoder(nn.Module):
 class DocumentSeparator(ClassificationModel):
     def __init__(
         self,
-        image_encoder=ImageEncoder(merge_to_batch=True),
-        text_encoder=TextEncoder(merge_to_batch=True),
         output_size=1,
         dropout=0.5,
         label_smoothing=0.0,
+        offline=False,
         **kwargs,
     ):
         super(DocumentSeparator, self).__init__(**kwargs)
-        self.image_encoder = image_encoder
-        self.text_encoder = text_encoder
+        self.image_encoder = ImageEncoder(merge_to_batch=True, offline=offline)
+        self.text_encoder = TextEncoder(merge_to_batch=True, offline=offline)
         self.lstm = nn.LSTM(
             input_size=512,
             hidden_size=512,
