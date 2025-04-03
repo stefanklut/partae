@@ -187,7 +187,7 @@ curl -X POST 0.0.0.0:5000/predict \
   -F images[]=@<image_path1> -F images[]=@<image_path2> -F images[]=@<image_path3 \
   -F texts[]=@<pagexml_path1> -F texts[]=@<pagexml_path2> -F texts[]=@<pagexml_path3>
 ```
-Ensure that the image paths and the pagexml paths belong to the same document. And that they are subsequent pages in the directory. The identifier is a unique identifier for the document, the output will be saved in a directory with the name being the unique id. The model is the path to the model file relative to the model base path. The model base path is the path to the directory where the model is stored. The model base path is set in the [`docker-compose.yml`][docker_compose_link] file. For example, the base path is set to `/models` and the model is stored in `/models/version1/checkpoints/model.pt` then the model path is `version1/checkpoints/model.pt`.
+Ensure that the image paths and the pagexml paths belong to the same document. And that they are subsequent pages in the directory. To send an empty image, for example before the first image, you can specify the path to the image as `null`. The identifier is a unique identifier for the document, the output will be saved in a directory with the name being the unique id. The model is the path to the model file relative to the model base path. The model base path is the path to the directory where the model is stored. The model base path is set in the [`docker-compose.yml`][docker_compose_link] file. For example, the base path is set to `/models` and the model is stored in `/models/version1/checkpoints/model.pt` then the model path is `version1/checkpoints/model.pt`.
 
 ## Contact
 This project was made while working at the [KNAW Humanities Cluster Digital Infrastructure][huc_di_link]
