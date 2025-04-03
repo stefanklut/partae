@@ -222,7 +222,7 @@ class SavePredictor(Predictor):
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             result = {
-                "result": result["label"].cpu().item(),
+                "label": result["label"].cpu().item(),
                 "confidence": result["confidence"].cpu().item(),
             }
 
