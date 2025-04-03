@@ -310,7 +310,7 @@ def predict() -> tuple[Response, int]:
 
         text_bytes = post_text_i.read()
         if post_text_i.filename == "null" and text_bytes == b"":
-            texts.append("")
+            texts.append({})
             continue
         xml = text_bytes.decode("utf-8")
         page_data = PageData.from_string(xml, text_name)
