@@ -136,9 +136,10 @@ def predict_class(
             output_path.parent.mkdir()
 
         output = predict_wrapper.predictor(data)
-        for key, value in output.items():
-            if isinstance(value, torch.Tensor):
-                output[key] = value.cpu().item()
+        output = {
+            "result": output["label"].cpu().item(),
+            "confidence": output["confidence"].cpu().item(),
+        }
 
         with open(output_path, "w") as file:
             json.dump(output, file)

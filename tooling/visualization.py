@@ -167,7 +167,7 @@ def main(args) -> None:
         image = get_image(image_path, thumbnail_dir)
 
         border = 10
-        color = [255, 0, 0] if data["label"] == 1 else [255, 255, 255]
+        color = [255, 0, 0] if data["result"] == 1 else [255, 255, 255]
         image = cv2.copyMakeBorder(image, border, border, border, border, cv2.BORDER_CONSTANT, value=color)
 
         if image is None:
