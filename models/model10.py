@@ -54,12 +54,6 @@ class ImageEncoder(nn.Module):
 
         imagenet = torchvision.models.resnet34(weights=ResNet34_Weights.DEFAULT)
         self.imagenet = nn.Sequential(*list(imagenet.children())[:-2])
-        self.conv2d = nn.Sequential(
-            nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-        )
         self.flatten = nn.Flatten(1, -1)
         self.fc = nn.Sequential(
             LazyLinearBlock(2048),

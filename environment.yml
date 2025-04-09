@@ -27,5 +27,6 @@ dependencies:
   - openpyxl
   - tensorboard
   - tensorboardX
+  - prettytable
   - pip:
       - torch-tb-profiler

@@ -277,10 +277,11 @@ class DocumentSeparator(ClassificationModel):
 
         output = self.flatten(encoded_features)
         output_start_center = self.fc_start(output).squeeze(dim=1)
-        output_end_center = self.fc_end(output).squeeze(dim=1)
-        output_middle_center = self.fc_middle(output).squeeze(dim=1)
 
         if "targets" in x:
+            output_end_center = self.fc_end(output).squeeze(dim=1)
+            output_middle_center = self.fc_middle(output).squeeze(dim=1)
+
             targets_start = x["targets"]["start"]
             targets_start_center = targets_start[:, targets_start.shape[1] // 2]
             targets_end = x["targets"]["end"]
