@@ -267,7 +267,7 @@ def predict() -> tuple[Response, int]:
         [
             ToTensor(),
             PadToMaxSize(),
-            Resize((224, 224)),
+            Resize((512, 512)),
         ]
     )
 
