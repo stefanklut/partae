@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.utils.data
 from natsort import natsorted
+from torch.amp import autocast
 from torchvision.transforms import Resize, ToTensor
 from tqdm import tqdm
 
@@ -53,12 +54,12 @@ class Predictor:
         self.model.eval()
 
     def __call__(self, data: dict) -> dict:
-        with torch.no_grad():
+        with torch.no_grad(), autocast("cuda", enabled=torch.cuda.is_available()):
             result_logits, _, _ = self.model(data)
-        # result_logits = torch.nn.functional.softmax(result_logits, dim=1)
-        result_logits = torch.nn.functional.sigmoid(result_logits)
-        confidence = torch.where(result_logits > 0.5, result_logits, 1 - result_logits)
-        label = (result_logits > 0.5).to(torch.int64)
+            # result_logits = torch.nn.functional.softmax(result_logits, dim=1)
+            result_logits = torch.nn.functional.sigmoid(result_logits)
+            confidence = torch.where(result_logits > 0.5, result_logits, 1 - result_logits)
+            label = (result_logits > 0.5).to(torch.int64)
         output = {
             "label": label,
             "confidence": confidence,
